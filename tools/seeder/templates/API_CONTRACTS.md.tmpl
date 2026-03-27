@@ -1,0 +1,53 @@
+# {{.ProjectName}} — API Contracts
+
+## Versioning Strategy
+
+All APIs are versioned via URL path prefix: `/api/v1/`
+
+## Response Envelope
+
+```json
+{
+  "data": {},
+  "error": null,
+  "meta": {
+    "request_id": "string",
+    "timestamp": "ISO8601"
+  }
+}
+```
+
+## Error Format
+
+```json
+{
+  "data": null,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable description",
+    "details": {}
+  }
+}
+```
+
+## Standard Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request (validation error) |
+| 401 | Unauthenticated |
+| 403 | Forbidden |
+| 404 | Not Found |
+| 409 | Conflict |
+| 422 | Unprocessable Entity |
+| 500 | Internal Server Error |
+
+## Endpoints
+
+<!-- Document each endpoint here as the API grows -->
+
+---
+
+*This document is read by Forge agents to ensure API implementations are consistent.*

@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install poetry
+RUN pip install poetry
+
+# Copy dependency files
+COPY pkg/agents/pyproject.toml pkg/agents/poetry.lock* ./
+RUN poetry config virtualenvs.create false && poetry install --no-dev
+
+# Copy source
+COPY pkg/agents/forge_agents ./forge_agents
+
+ENTRYPOINT ["python", "-m", "forge_agents.runner"]

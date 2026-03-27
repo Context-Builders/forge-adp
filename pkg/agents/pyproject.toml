@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "forge-agents"
+version = "0.1.0"
+description = "Forge Agent Runtime Framework"
+authors = ["Your Org"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+anthropic = "^0.18.0"
+httpx = "^0.26.0"
+pydantic = "^2.5.0"
+redis = "^5.0.0"
+sqlalchemy = "^2.0.0"
+psycopg2-binary = "^2.9.9"
+pyyaml = "^6.0.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+ruff = "^0.1.0"
+mypy = "^1.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

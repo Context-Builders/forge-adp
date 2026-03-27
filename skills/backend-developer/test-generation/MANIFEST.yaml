@@ -1,0 +1,47 @@
+agent_role: backend-developer
+skill_name: test-generation
+version: 1.0.0
+description: "Generate unit and integration tests for existing backend code from ticket and source context"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket specifying what needs test coverage"
+  - type: source_files
+    required: true
+    description: "List of source file paths that need test coverage"
+  - type: test_types
+    required: false
+    description: "List of test types to generate: unit, integration, e2e. Defaults to [unit]"
+  - type: coverage_target
+    required: false
+    description: "Minimum line coverage percentage target. Defaults to 80"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: all_new_tests_pass
+  - type: coverage_report
+    validation: meets_coverage_target
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 60000
+    max_output: 10000
+
+autonomy_level: 1
+estimated_duration: "30-90 minutes"

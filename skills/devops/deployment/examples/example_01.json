@@ -1,0 +1,26 @@
+{
+  "input": {
+    "jira_ticket": "OPS-120",
+    "deployment_spec": {
+      "service": "payments-api",
+      "image_tag": "v1.4.2",
+      "replicas": 3,
+      "resources": {
+        "cpu_request": "100m",
+        "cpu_limit": "500m",
+        "memory_request": "128Mi",
+        "memory_limit": "512Mi"
+      }
+    },
+    "target_environment": "staging",
+    "deployment_strategy": "rolling"
+  },
+  "output": {
+    "branch": "forge/devops/OPS-120-payments-api-deployment",
+    "pr_number": 601,
+    "files_modified": [
+      "deployments/helm/forge/values.staging.yaml"
+    ],
+    "dry_run_status": "passed"
+  }
+}

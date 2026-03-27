@@ -1,0 +1,12 @@
+{
+  "input": {
+    "goal_description": "Enable customers to request refunds from the payment detail page",
+    "sprint_capacity": 40,
+    "existing_backlog": []
+  },
+  "output": {
+    "tickets_created": ["PAY-1260", "PAY-1261", "PAY-1262", "PAY-1263"],
+    "total_estimate_points": 34,
+    "sprint_plan_summary": "4 tickets: refund API (BE 8pts), refund UI (FE 13pts), refund email (BE 5pts), E2E tests (QA 8pts)"
+  }
+}

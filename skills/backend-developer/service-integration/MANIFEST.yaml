@@ -1,0 +1,44 @@
+agent_role: backend-developer
+skill_name: service-integration
+version: 1.0.0
+description: "Integrate third-party services and internal adapters into the application service layer"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket ID describing the integration requirement"
+  - type: service_spec
+    required: false
+    description: "Service API spec or SDK documentation reference; falls back to ticket attachment"
+  - type: integration_type
+    required: false
+    description: "One of: rest_client, grpc_client, sdk_wrapper, message_consumer, message_producer"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: adapter_files
+    validation: types_checked
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 50000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "60-180 minutes"

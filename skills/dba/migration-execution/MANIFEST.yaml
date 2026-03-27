@@ -1,0 +1,49 @@
+agent_role: dba
+skill_name: migration-execution
+version: 1.0.0
+description: "Execute pending database migrations against a target environment and verify the result"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - database_api
+    - github_api
+    - jira_api
+
+inputs:
+  - type: migration_tool
+    required: true
+    description: "Migration tool in use: goose, flyway, liquibase, alembic, dbmate, migrate"
+  - type: target_environment
+    required: true
+    description: "Environment to run migrations against: dev, staging, production"
+  - type: migration_source
+    required: true
+    description: "Path to migration files relative to repository root (e.g. internal/db/migrations)"
+  - type: jira_ticket
+    required: false
+    description: "Jira ticket associated with this migration run, used to post execution results"
+  - type: dry_run
+    required: false
+    description: "If true, validate and report pending migrations without applying them. Defaults to false."
+
+outputs:
+  - type: migration_result
+    validation: migrations_applied_successfully
+  - type: post_migration_report
+    validation: smoke_queries_passed
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 10000
+    max_output: 4000
+
+autonomy_level: 1
+estimated_duration: "5-20 minutes"

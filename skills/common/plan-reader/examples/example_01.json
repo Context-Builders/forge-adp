@@ -1,0 +1,14 @@
+{
+  "input": {
+    "documents": ["ARCHITECTURE.md", "API_CONTRACTS.md", "DATA_MODEL.md"],
+    "repo": "acme-corp/payments-service",
+    "branch": "main"
+  },
+  "output": {
+    "documents": {
+      "ARCHITECTURE.md": "# Payments Service Architecture\n\nThis service handles...",
+      "API_CONTRACTS.md": "# API Contracts\n\n## Versioning\nAll endpoints are prefixed with /api/v1..."
+    },
+    "missing_documents": ["DATA_MODEL.md"]
+  }
+}

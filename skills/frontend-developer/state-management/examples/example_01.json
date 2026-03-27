@@ -1,0 +1,18 @@
+{
+  "input": {
+    "jira_ticket": "FE-220",
+    "state_spec": "Payment list state: fetch list by date range, selected payment, loading/error states",
+    "state_library": "redux",
+    "affected_features": ["PaymentListPage", "PaymentSummaryWidget"]
+  },
+  "output": {
+    "branch": "forge/frontend-developer/FE-220-payments-state",
+    "pr_number": 415,
+    "files_created": [
+      "src/store/payments/paymentsSlice.ts",
+      "src/store/payments/paymentsSelectors.ts",
+      "src/store/payments/paymentsThunks.ts",
+      "src/store/payments/paymentsSlice.test.ts"
+    ]
+  }
+}

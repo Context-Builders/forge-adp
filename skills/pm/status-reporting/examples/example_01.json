@@ -1,0 +1,15 @@
+{
+  "input": {
+    "sprint_id": "PAY Sprint 12",
+    "report_audience": "stakeholders",
+    "include_blockers": true
+  },
+  "output": {
+    "completion_percentage": 65,
+    "tickets_done": 8,
+    "tickets_in_progress": 4,
+    "tickets_blocked": 1,
+    "slack_message_ts": "1708531200.000200",
+    "confluence_page_url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/123456"
+  }
+}

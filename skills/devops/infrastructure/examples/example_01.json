@@ -1,0 +1,15 @@
+{
+  "input": {
+    "jira_ticket": "OPS-130",
+    "infra_spec": "Create an RDS PostgreSQL 16 instance: db.t3.medium, Multi-AZ, encrypted at rest, in the payments VPC private subnet.",
+    "cloud_provider": "aws",
+    "iac_tool": "terraform"
+  },
+  "output": {
+    "branch": "forge/devops/OPS-130-payments-rds-infra",
+    "pr_number": 610,
+    "files_created": ["deployments/terraform/rds_payments.tf"],
+    "plan_summary": "+4 resources, ~0 changes, ~0 destructions",
+    "estimated_monthly_cost": "$185"
+  }
+}

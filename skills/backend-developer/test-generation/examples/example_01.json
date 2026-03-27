@@ -1,0 +1,20 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1250",
+    "source_files": [
+      "src/services/payment_service.go",
+      "src/domain/payment.go"
+    ],
+    "test_types": ["unit"],
+    "coverage_target": 90
+  },
+  "output": {
+    "branch": "forge/backend-developer/PAY-1250-test-coverage",
+    "pr_number": 360,
+    "files_created": [
+      "src/services/payment_service_test.go",
+      "src/domain/payment_test.go"
+    ],
+    "coverage_achieved": 93.4
+  }
+}

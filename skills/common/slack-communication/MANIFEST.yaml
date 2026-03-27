@@ -1,0 +1,49 @@
+agent_role: common
+skill_name: slack-communication
+version: 1.0.0
+description: "Send messages, create threads, post rich blocks, and escalate to humans via Slack"
+
+dependencies:
+  skills: []
+  tools:
+    - slack_api
+
+inputs:
+  - type: action
+    required: true
+    description: "One of: send_message, reply_thread, escalate, notify_completion, notify_failure"
+  - type: channel
+    required: true
+    description: "Slack channel name or ID (e.g. #payments-eng or C012AB3CD)"
+  - type: message
+    required: true
+    description: "Message text or Slack block kit JSON payload"
+  - type: thread_ts
+    required: false
+    description: "Timestamp of parent message; required for reply_thread"
+  - type: mention_users
+    required: false
+    description: "List of Slack user IDs or @handles to mention"
+  - type: urgency
+    required: false
+    description: "One of: low, medium, high, critical — affects formatting and mention behavior"
+
+outputs:
+  - type: message_ts
+    validation: timestamp_returned
+  - type: channel_id
+    validation: matches_target_channel
+  - type: permalink
+    validation: is_valid_slack_url
+
+llm:
+  preferred: claude-haiku
+  minimum_tier: fast
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 2000
+    max_output: 1000
+
+autonomy_level: 2
+estimated_duration: "less than 1 minute"

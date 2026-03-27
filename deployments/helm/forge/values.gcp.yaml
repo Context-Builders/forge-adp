@@ -1,0 +1,26 @@
+# GCP-specific Helm values overlay
+# Usage: helm install forge ./deployments/helm/forge -f values.yaml -f values.gcp.yaml
+
+global:
+  cloud: gcp
+
+externalDatabase:
+  # Replace with your Cloud SQL private IP after terraform apply
+  host: "10.x.x.x"
+  existingSecret: forge-db-credentials
+
+serviceAccount:
+  annotations:
+    # Replace with the GCP service account email for Workload Identity
+    iam.gke.io/gcp-service-account: "forge-sa@GCP_PROJECT_ID.iam.gserviceaccount.com"
+
+ingress:
+  enabled: true
+  className: gce
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: forge-ingress-ip
+    networking.gke.io/managed-certificates: forge-managed-cert
+
+storage:
+  secretsBackend: gcp-secret-manager

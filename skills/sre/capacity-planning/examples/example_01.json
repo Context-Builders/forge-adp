@@ -1,0 +1,20 @@
+{
+  "input": {
+    "jira_ticket": "SRE-080",
+    "services": ["payments-api", "payments-worker"],
+    "planning_horizon": 90,
+    "growth_assumption_pct": 25
+  },
+  "output": {
+    "services_analyzed": 2,
+    "at_risk_findings": [
+      {
+        "service": "payments-worker",
+        "issue": "Projected to reach 85% CPU within 60 days at 25% growth",
+        "recommendation": "Increase HPA max replicas from 10 to 16 (+$120/mo)",
+        "ticket": "SRE-081"
+      }
+    ],
+    "report_url": "https://acme.atlassian.net/wiki/spaces/SRE/pages/345678"
+  }
+}

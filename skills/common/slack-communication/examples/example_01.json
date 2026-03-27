@@ -1,0 +1,15 @@
+{
+  "input": {
+    "action": "notify_completion",
+    "channel": "#payments-eng",
+    "message": "✅ PAY-1234 complete. Implemented GET /payments/:id — PR #347 ready for review.",
+    "thread_ts": "1708530000.000200",
+    "mention_users": [],
+    "urgency": "low"
+  },
+  "output": {
+    "message_ts": "1708531200.000100",
+    "channel_id": "C034XY5ZA",
+    "permalink": "https://acme.slack.com/archives/C034XY5ZA/p1708531200000100"
+  }
+}

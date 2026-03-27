@@ -1,0 +1,72 @@
+forge:
+  version: "0.1.0"
+  project_name: "{{.ProjectName}}"
+  company_id: "{{.CompanyID}}"
+  project_id: "{{.ProjectID}}"
+  
+  agents:
+    enabled:
+{{- range .Agents}}
+      - {{.}}
+{{- end}}
+
+  stack:
+    frontend: "{{.TechStack.Frontend}}"
+    backend: "{{.TechStack.Backend}}"
+    database: "{{.TechStack.Database}}"
+    infrastructure: "{{.TechStack.Infrastructure}}"
+    ci_cd: "{{.TechStack.CICD}}"
+
+  integrations:
+    jira:
+      project_key: "{{.JiraProjectKey}}"
+      issue_types:
+        epic: "Epic"
+        story: "Story"
+        task: "Task"
+        bug: "Bug"
+    github:
+      repo: "{{.GitHubRepo}}"
+      default_branch: "main"
+      branch_prefix: "forge/"
+      require_reviews: 1
+    slack:
+      channel: "{{.SlackChannel}}"
+      escalation_channel: "{{.SlackChannel}}-escalations"
+{{- if .HasPlatform}}
+
+  platform:
+    id: "{{.Platform.ID}}"
+    repos:
+{{- range .Platform.Repos}}
+      - role: "{{.Role}}"
+{{- if .Repo}}
+        repo: "{{.Repo}}"
+{{- end}}
+{{- if .LocalPath}}
+        local_path: "{{.LocalPath}}"
+{{- end}}
+{{- end}}
+{{- end}}
+
+  quality_gates:
+    all_agents:
+      - "lint_pass"
+      - "type_check_pass"
+    code_agents:
+      - "unit_tests_pass"
+      - "coverage_threshold_met"
+    deployment:
+      - "all_quality_gates_pass"
+      - "qa_sign_off"
+
+  budget:
+    monthly_limit: 5000
+    warning_threshold: 0.80
+    per_ticket_soft_limit: 50
+    enforcement: "degrade"
+
+  memory:
+    medium_term:
+      retention: "quarterly"
+      max_records_per_agent: 500

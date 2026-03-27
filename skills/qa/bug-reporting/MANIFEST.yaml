@@ -1,0 +1,45 @@
+agent_role: qa
+skill_name: bug-reporting
+version: 1.0.0
+description: "Create well-structured bug reports in Jira from test failures, error logs, or observations"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - jira_api
+    - slack_api
+
+inputs:
+  - type: failure_evidence
+    required: true
+    description: "Test failure output, stack trace, screenshot, or error log to document"
+  - type: reproduction_steps
+    required: false
+    description: "Steps to reproduce the failure if known"
+  - type: environment
+    required: false
+    description: "Environment where the failure was observed (dev, staging, production)"
+  - type: severity
+    required: false
+    description: "One of: critical, high, medium, low. Inferred from evidence if absent."
+
+outputs:
+  - type: jira_ticket
+    validation: bug_ticket_created_with_required_fields
+  - type: slack_notification
+    validation: posted_to_qa_channel
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 10000
+    max_output: 3000
+
+autonomy_level: 2
+estimated_duration: "5-10 minutes"

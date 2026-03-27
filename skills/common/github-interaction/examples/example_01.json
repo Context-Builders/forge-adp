@@ -1,0 +1,18 @@
+{
+  "input": {
+    "action": "open_pr",
+    "repo": "acme-corp/payments-service",
+    "pr_config": {
+      "title": "feat(PAY-1234): add GET /payments/:id endpoint",
+      "body": "Closes PAY-1234\n\n## Changes\n- Added route handler\n- Added unit tests\n- Updated OpenAPI spec",
+      "head": "forge/backend-developer/PAY-1234-get-payment",
+      "base": "main",
+      "reviewers": ["jane-smith", "bob-jones"]
+    }
+  },
+  "output": {
+    "pr_number": 347,
+    "url": "https://github.com/acme-corp/payments-service/pull/347",
+    "status": "open"
+  }
+}

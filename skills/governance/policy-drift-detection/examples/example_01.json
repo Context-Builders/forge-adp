@@ -1,0 +1,29 @@
+{
+  "input": {
+    "period": "P30D",
+    "project_id": "proj-123"
+  },
+  "output": {
+    "period": "2026-01-23/2026-02-22",
+    "roles_analysed": ["backend-developer", "frontend-developer", "dba", "devops", "qa", "secops"],
+    "total_actions_observed": 1547,
+    "explicitly_allowed": 1489,
+    "explicitly_denied": 31,
+    "implicitly_allowed": 27,
+    "policy_gaps": [
+      {
+        "role": "backend-developer",
+        "action": "delete_branch",
+        "resource": "protected-branches",
+        "frequency": 12,
+        "severity": "High",
+        "gap_type": "implicitly_allowed",
+        "recommendation": "Add explicit deny rule for delete on protected-branches for non-devops roles",
+        "jira_ticket": "GOV-015"
+      }
+    ],
+    "remediation_prs": ["https://github.com/org/repo/pull/88"],
+    "drift_score_delta": 0.04,
+    "slack_posted": true
+  }
+}

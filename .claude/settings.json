@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "forge": {
+      "command": "node",
+      "args": ["${workspaceFolder}/tools/mcp-server/dist/index.js"],
+      "env": {
+        "FORGE_ORCHESTRATOR_URL": "http://localhost:19080",
+        "FORGE_REGISTRY_URL": "http://localhost:19081",
+        "FORGE_API_TOKEN": ""
+      }
+    }
+  }
+}

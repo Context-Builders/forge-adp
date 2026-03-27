@@ -1,0 +1,29 @@
+{
+  "input": {
+    "ticket_ids": ["PAY-1270", "PAY-1271", "PAY-1272"],
+    "triage_criteria": null
+  },
+  "output": {
+    "triage_results": [
+      {
+        "ticket_id": "PAY-1270",
+        "priority": "High",
+        "assigned_agent": "backend-developer",
+        "status": "ready"
+      },
+      {
+        "ticket_id": "PAY-1271",
+        "priority": "Medium",
+        "assigned_agent": "frontend-developer",
+        "status": "ready"
+      },
+      {
+        "ticket_id": "PAY-1272",
+        "priority": null,
+        "assigned_agent": null,
+        "status": "needs_clarification",
+        "missing_fields": ["acceptance_criteria"]
+      }
+    ]
+  }
+}

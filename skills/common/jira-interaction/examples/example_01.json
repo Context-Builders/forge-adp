@@ -1,0 +1,19 @@
+{
+  "input": {
+    "action": "create_ticket",
+    "project_key": "PAY",
+    "ticket_data": {
+      "type": "Story",
+      "summary": "Add GET /payments/:id endpoint",
+      "description": "As a payment consumer, I need to retrieve a single payment by ID so that I can display payment details in the UI.\n\n## Acceptance Criteria\n- Returns 200 with payment object when found\n- Returns 404 with standard error body when not found\n- Requires authentication\n- Response matches OpenAPI spec",
+      "priority": "Medium",
+      "labels": ["forge", "api", "payments"],
+      "assignee": "backend-developer-agent"
+    }
+  },
+  "output": {
+    "ticket_id": "PAY-1234",
+    "url": "https://acme.atlassian.net/browse/PAY-1234",
+    "status": "To Do"
+  }
+}

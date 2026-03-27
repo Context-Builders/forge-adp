@@ -1,0 +1,47 @@
+agent_role: frontend-developer
+skill_name: page-implementation
+version: 1.0.0
+description: "Implement full application pages from UX specs, composing components and wiring data fetching"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket with page requirements and acceptance criteria"
+  - type: ux_spec
+    required: false
+    description: "Figma link or UX spec document describing the full page layout"
+  - type: route_path
+    required: false
+    description: "URL route for the page (e.g. /payments/:id)"
+  - type: data_requirements
+    required: false
+    description: "List of API endpoints the page must call"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: page_files
+    validation: types_checked
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 40000
+    max_output: 10000
+
+autonomy_level: 1
+estimated_duration: "60-180 minutes"

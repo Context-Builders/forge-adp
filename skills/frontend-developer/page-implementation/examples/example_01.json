@@ -1,0 +1,18 @@
+{
+  "input": {
+    "jira_ticket": "FE-215",
+    "ux_spec": "https://figma.com/file/def456/PaymentDetailPage",
+    "route_path": "/payments/:id",
+    "data_requirements": ["GET /api/v1/payments/:id", "GET /api/v1/payments/:id/events"]
+  },
+  "output": {
+    "branch": "forge/frontend-developer/FE-215-payment-detail-page",
+    "pr_number": 408,
+    "files_created": [
+      "src/pages/PaymentDetailPage/PaymentDetailPage.tsx",
+      "src/pages/PaymentDetailPage/PaymentDetailPage.test.tsx",
+      "src/pages/PaymentDetailPage/usePaymentDetail.ts",
+      "src/pages/PaymentDetailPage/index.ts"
+    ]
+  }
+}

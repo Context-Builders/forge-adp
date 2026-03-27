@@ -1,0 +1,45 @@
+agent_role: governance
+skill_name: compliance-report
+version: 1.0.0
+description: "Analyse the audit log and agent behaviour over a period to produce a structured compliance report covering policy adherence, quality gate pass rates, and cost burn"
+
+dependencies:
+  skills:
+    - common/plan-reader
+    - common/slack-communication
+    - common/jira-interaction
+  tools:
+    - postgres_api
+    - slack_api
+    - jira_api
+
+inputs:
+  - type: period
+    required: false
+    description: "ISO 8601 duration to analyse, e.g. P7D (7 days), P1M (1 month). Defaults to P7D."
+  - type: project_id
+    required: true
+    description: "Forge project ID to scope the report."
+  - type: jira_ticket
+    required: false
+    description: "Optional Jira ticket to attach the report to."
+
+outputs:
+  - type: compliance_report
+    validation: report_has_summary_and_findings
+  - type: findings
+    validation: critical_findings_have_jira_tickets
+  - type: slack_summary
+    validation: summary_posted_to_channel
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 30000
+    max_output: 8000
+
+autonomy_level: 2
+estimated_duration: "15-45 minutes"

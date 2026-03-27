@@ -1,0 +1,49 @@
+agent_role: devops
+skill_name: deployment
+version: 1.0.0
+description: "Manage Kubernetes manifests, Helm charts, and ArgoCD configurations for service deployments"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+    - kubernetes_api
+    - helm_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket describing the deployment change"
+  - type: deployment_spec
+    required: false
+    description: "Service name, image tag, replica counts, resource limits, environment variables"
+  - type: target_environment
+    required: false
+    description: "One of: dev, staging, production. Defaults to staging."
+  - type: deployment_strategy
+    required: false
+    description: "One of: rolling, blue-green, canary. Defaults to rolling."
+
+outputs:
+  - type: deployment_config
+    validation: manifests_pass_dry_run
+  - type: pull_request
+    validation: approved_by_devops_lead
+  - type: deployment_result
+    validation: pods_healthy_post_deploy
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "20-60 minutes"

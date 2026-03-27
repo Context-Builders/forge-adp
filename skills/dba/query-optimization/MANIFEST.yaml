@@ -1,0 +1,48 @@
+agent_role: dba
+skill_name: query-optimization
+version: 1.0.0
+description: "Analyze slow queries, identify bottlenecks, and generate optimized SQL with index recommendations"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+    - database_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket describing the performance problem"
+  - type: slow_queries
+    required: true
+    description: "List of SQL queries or slow query log excerpts to optimize"
+  - type: schema
+    required: false
+    description: "Relevant table DDL; fetched from database if not provided"
+  - type: query_plans
+    required: false
+    description: "EXPLAIN ANALYZE output for each slow query"
+
+outputs:
+  - type: optimized_queries
+    validation: explain_cost_reduced
+  - type: index_recommendations
+    validation: migration_file_generated
+  - type: pull_request
+    validation: migration_reviewed_by_lead
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 30000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "30-120 minutes"

@@ -1,0 +1,45 @@
+agent_role: pm
+skill_name: status-reporting
+version: 1.0.0
+description: "Generate sprint status reports from Jira data and post to Slack and Confluence"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - jira_api
+    - slack_api
+    - confluence_api
+
+inputs:
+  - type: sprint_id
+    required: true
+    description: "Jira sprint ID or sprint name to report on"
+  - type: report_audience
+    required: false
+    description: "One of: team, stakeholders, executives. Affects level of detail."
+  - type: include_blockers
+    required: false
+    description: "Whether to include a dedicated blockers section. Defaults to true."
+
+outputs:
+  - type: status_report
+    validation: all_in_progress_tickets_covered
+  - type: slack_message
+    validation: posted_to_configured_channel
+  - type: confluence_page
+    validation: page_created_or_updated
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 15000
+    max_output: 4000
+
+autonomy_level: 2
+estimated_duration: "5-15 minutes"

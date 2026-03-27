@@ -1,0 +1,43 @@
+agent_role: dba
+skill_name: schema-migration
+version: 1.0.0
+description: "Design and generate database schema migrations from ticket specifications with up/down scripts"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+    - database_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket describing the schema change"
+  - type: schema_change_spec
+    required: false
+    description: "Explicit DDL changes or description of tables/columns to add, modify, or remove"
+  - type: migration_tool
+    required: false
+    description: "Migration tool in use: goose, flyway, liquibase, alembic. Inferred from project if absent."
+
+outputs:
+  - type: migration_files
+    validation: up_and_down_scripts_present
+  - type: pull_request
+    validation: reviewed_by_dba_lead_and_backend_lead
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "20-60 minutes"

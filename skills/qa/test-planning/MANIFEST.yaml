@@ -1,0 +1,44 @@
+agent_role: qa
+skill_name: test-planning
+version: 1.0.0
+description: "Generate a structured test plan for a feature or release from Jira tickets and acceptance criteria"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/plan-reader
+    - common/slack-communication
+  tools:
+    - jira_api
+    - confluence_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Epic or Story ticket to generate a test plan for"
+  - type: test_scope
+    required: false
+    description: "List of module names or feature areas to include in scope"
+  - type: risk_areas
+    required: false
+    description: "Known high-risk areas to prioritize in testing"
+
+outputs:
+  - type: test_plan
+    validation: covers_all_acceptance_criteria
+  - type: confluence_page
+    validation: page_created_with_test_plan_content
+  - type: jira_tickets
+    validation: test_case_tickets_created
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 25000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "20-60 minutes"

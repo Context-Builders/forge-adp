@@ -1,0 +1,47 @@
+agent_role: frontend-developer
+skill_name: component-implementation
+version: 1.0.0
+description: "Implement reusable UI components from design specs and API contracts"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket with component requirements and acceptance criteria"
+  - type: design_spec
+    required: false
+    description: "Figma link, design token spec, or screenshot reference"
+  - type: api_contract
+    required: false
+    description: "API response shape that the component will consume"
+  - type: component_name
+    required: false
+    description: "PascalCase name of the component to create"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: component_files
+    validation: types_checked
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 30000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "30-90 minutes"

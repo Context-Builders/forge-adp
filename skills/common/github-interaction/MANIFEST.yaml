@@ -1,0 +1,46 @@
+agent_role: common
+skill_name: github-interaction
+version: 1.0.0
+description: "Create and manage GitHub branches, commits, pull requests, and code reviews"
+
+dependencies:
+  skills: []
+  tools:
+    - github_api
+
+inputs:
+  - type: action
+    required: true
+    description: "One of: create_branch, commit_files, open_pr, request_review, merge_pr"
+  - type: repo
+    required: true
+    description: "GitHub repository in owner/repo format"
+  - type: branch_name
+    required: false
+    description: "Target branch name; required for create_branch and commit_files"
+  - type: files
+    required: false
+    description: "List of {path, content} objects; required for commit_files"
+  - type: pr_config
+    required: false
+    description: "PR title, body, base branch, reviewers; required for open_pr"
+
+outputs:
+  - type: branch_ref
+    validation: branch_must_exist_in_remote
+  - type: commit_sha
+    validation: sha_must_be_reachable
+  - type: pull_request
+    validation: pr_must_be_open
+
+llm:
+  preferred: claude-haiku
+  minimum_tier: fast
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 4000
+    max_output: 1000
+
+autonomy_level: 2
+estimated_duration: "1-5 minutes"

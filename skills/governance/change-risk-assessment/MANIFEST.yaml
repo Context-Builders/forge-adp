@@ -1,0 +1,45 @@
+agent_role: governance
+skill_name: change-risk-assessment
+version: 1.0.0
+description: "Evaluate the risk of a proposed high-impact task (production deployment, schema migration, security change) and produce a risk score and approval recommendation before the task is queued"
+
+dependencies:
+  skills:
+    - common/plan-reader
+    - common/jira-interaction
+    - common/slack-communication
+  tools:
+    - github_api
+    - jira_api
+    - slack_api
+
+inputs:
+  - type: task_payload
+    required: true
+    description: "Serialised Forge task payload describing the proposed change."
+  - type: agent_role
+    required: true
+    description: "Role of the agent that will execute the task (e.g. devops, dba)."
+  - type: jira_ticket
+    required: false
+    description: "Jira ticket associated with the change request."
+
+outputs:
+  - type: risk_score
+    validation: score_in_range_0_to_10
+  - type: risk_report
+    validation: report_has_mitigations
+  - type: approval_recommendation
+    validation: recommendation_is_approve_conditional_or_reject
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 2
+estimated_duration: "10-20 minutes"

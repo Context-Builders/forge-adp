@@ -1,0 +1,27 @@
+# AWS-specific Helm values overlay
+# Usage: helm install forge ./deployments/helm/forge -f values.yaml -f values.aws.yaml
+
+global:
+  cloud: aws
+
+externalDatabase:
+  # Replace with your RDS endpoint after terraform apply
+  host: "forge-db.xxxxx.us-east-1.rds.amazonaws.com"
+  existingSecret: forge-db-credentials
+
+serviceAccount:
+  annotations:
+    # Replace with the IAM role ARN created by Terraform
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/forge-service-role"
+
+ingress:
+  enabled: true
+  className: aws-load-balancer
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID"
+
+storage:
+  secretsBackend: aws-secrets-manager

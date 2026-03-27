@@ -1,0 +1,45 @@
+agent_role: backend-developer
+skill_name: business-logic
+version: 1.0.0
+description: "Implement domain rules, validation logic, and service-layer operations from ticket specifications"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket ID containing domain requirements and acceptance criteria"
+  - type: domain_spec
+    required: false
+    description: "Explicit domain rules document; falls back to plan documents if absent"
+  - type: existing_models
+    required: false
+    description: "List of existing domain model file paths for context"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: service_files
+    validation: types_checked
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+    - claude-haiku
+  token_budget:
+    max_input: 40000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "45-150 minutes"

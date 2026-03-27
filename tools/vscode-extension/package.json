@@ -1,0 +1,149 @@
+{
+  "name": "forge-adp",
+  "displayName": "Forge ADP",
+  "description": "Submit tasks to Forge agents, track progress, and approve checkpoints directly from VS Code.",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "publisher": "dotrage",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dotrage/forge-adp"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "AI"],
+  "keywords": ["forge", "agents", "ai", "orchestration"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Forge ADP",
+      "properties": {
+        "forge.orchestratorUrl": {
+          "type": "string",
+          "default": "http://localhost:19080",
+          "description": "Base URL of the Forge Orchestrator service."
+        },
+        "forge.registryUrl": {
+          "type": "string",
+          "default": "http://localhost:19081",
+          "description": "Base URL of the Forge Registry service."
+        },
+        "forge.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for Forge API authentication (leave blank for local dev).",
+          "markdownDescription": "Bearer token for Forge API authentication. For production use [Secrets Storage](https://code.visualstudio.com/api/references/vscode-api#SecretStorage) is recommended over storing tokens here."
+        },
+        "forge.pollIntervalSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "How often (in seconds) to refresh the task list in the sidebar."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "forge.submitTask",
+        "title": "Forge: Submit Task",
+        "icon": "$(play)"
+      },
+      {
+        "command": "forge.getTask",
+        "title": "Forge: Get Task Status"
+      },
+      {
+        "command": "forge.listTasks",
+        "title": "Forge: List Tasks",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "forge.approveTask",
+        "title": "Forge: Approve Task",
+        "icon": "$(check)"
+      },
+      {
+        "command": "forge.rejectTask",
+        "title": "Forge: Reject Task",
+        "icon": "$(x)"
+      },
+      {
+        "command": "forge.refreshTasks",
+        "title": "Forge: Refresh Task List",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "forge.openTaskInBrowser",
+        "title": "Forge: Open Task in Browser",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "forge.checkHealth",
+        "title": "Forge: Check Service Health"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "forge-adp",
+          "title": "Forge ADP",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "forge-adp": [
+        {
+          "id": "forge.tasksView",
+          "name": "Agent Tasks",
+          "icon": "$(tasklist)"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "forge.submitTask",
+          "when": "view == forge.tasksView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "forge.refreshTasks",
+          "when": "view == forge.tasksView",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "forge.approveTask",
+          "when": "view == forge.tasksView && viewItem == awaiting_approval",
+          "group": "inline@1"
+        },
+        {
+          "command": "forge.rejectTask",
+          "when": "view == forge.tasksView && viewItem == awaiting_approval",
+          "group": "inline@2"
+        },
+        {
+          "command": "forge.openTaskInBrowser",
+          "when": "view == forge.tasksView",
+          "group": "inline@3"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "lint": "eslint src --ext .ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}

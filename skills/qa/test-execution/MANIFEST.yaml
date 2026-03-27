@@ -1,0 +1,48 @@
+agent_role: qa
+skill_name: test-execution
+version: 1.0.0
+description: "Execute test suites against a target environment and report results"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - github_api
+    - jira_api
+    - slack_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket or test plan ticket to execute against"
+  - type: test_suite
+    required: true
+    description: "One of: unit, integration, e2e, regression, smoke"
+  - type: target_environment
+    required: false
+    description: "Environment to run tests against: dev, staging. Defaults to staging."
+  - type: test_filter
+    required: false
+    description: "Optional regex or tag to filter which tests to run"
+
+outputs:
+  - type: test_results
+    validation: results_written_to_jira_ticket
+  - type: failures
+    validation: bug_tickets_created_for_each_failure
+  - type: pass_rate
+    validation: numeric_percentage
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 10000
+    max_output: 3000
+
+autonomy_level: 2
+estimated_duration: "10-60 minutes"

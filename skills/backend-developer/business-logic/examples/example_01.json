@@ -1,0 +1,16 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1235",
+    "domain_spec": "A payment can only be REFUNDED if its status is CAPTURED and the refund amount does not exceed the original payment amount.",
+    "existing_models": ["src/domain/payment.go", "src/services/payment_service.go"]
+  },
+  "output": {
+    "branch": "forge/backend-developer/PAY-1235-payment-refund-logic",
+    "pr_number": 348,
+    "files_created": [
+      "src/services/payment_service.go",
+      "src/services/payment_service_test.go"
+    ],
+    "rules_implemented": ["refund_amount_validation", "status_guard_captured"]
+  }
+}

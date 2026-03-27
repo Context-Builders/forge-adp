@@ -1,0 +1,22 @@
+{
+  "input": {
+    "jira_ticket": "FE-210",
+    "design_spec": "https://figma.com/file/abc123/PaymentCard",
+    "api_contract": {
+      "id": "string",
+      "amount": "number",
+      "currency": "string",
+      "status": "PENDING | CAPTURED | REFUNDED"
+    },
+    "component_name": "PaymentCard"
+  },
+  "output": {
+    "branch": "forge/frontend-developer/FE-210-PaymentCard",
+    "pr_number": 401,
+    "files_created": [
+      "src/components/PaymentCard/PaymentCard.tsx",
+      "src/components/PaymentCard/PaymentCard.test.tsx",
+      "src/components/PaymentCard/index.ts"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+agent_role: pm
+skill_name: sprint-planning
+version: 1.0.0
+description: "Decompose product goals into sprint-ready Jira tickets with estimates, priorities, and dependencies"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/plan-reader
+    - common/slack-communication
+  tools:
+    - jira_api
+
+inputs:
+  - type: goal_description
+    required: true
+    description: "Product or engineering goal to decompose into sprint tickets"
+  - type: sprint_capacity
+    required: false
+    description: "Team capacity in story points or developer-days for the sprint"
+  - type: existing_backlog
+    required: false
+    description: "List of existing ticket IDs to consider before creating new ones"
+
+outputs:
+  - type: jira_tickets
+    validation: all_tickets_created_in_jira
+  - type: sprint_plan
+    validation: total_points_within_capacity
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "15-45 minutes"

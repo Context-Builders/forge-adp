@@ -1,0 +1,43 @@
+agent_role: backend-developer
+skill_name: api-implementation
+version: 1.0.0
+description: "Implement REST API endpoints from OpenAPI specifications"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+  - type: api_contract
+    required: true
+    source: plan_document | ticket_attachment
+  - type: data_model
+    required: false
+    source: dba_agent_output
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: api_documentation
+    format: openapi_3.1
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+    - claude-haiku
+  token_budget:
+    max_input: 50000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "30-120 minutes"

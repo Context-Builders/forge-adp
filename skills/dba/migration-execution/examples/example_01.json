@@ -1,0 +1,20 @@
+{
+  "input": {
+    "jira_ticket": "DB-072",
+    "migration_tool": "goose",
+    "target_environment": "staging",
+    "migration_source": "internal/db/migrations",
+    "dry_run": false
+  },
+  "output": {
+    "migrations_applied": [
+      "000002_add_currency_to_payments"
+    ],
+    "previous_version": "000001",
+    "current_version": "000002",
+    "duration_seconds": 3.2,
+    "smoke_queries_passed": true,
+    "status": "success",
+    "jira_comment_posted": true
+  }
+}

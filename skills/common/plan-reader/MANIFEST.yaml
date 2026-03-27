@@ -1,0 +1,42 @@
+agent_role: common
+skill_name: plan-reader
+version: 1.0.0
+description: "Retrieve and parse plan documents from project repositories and Confluence spaces"
+
+dependencies:
+  skills: []
+  tools:
+    - github_api
+    - confluence_api
+
+inputs:
+  - type: documents
+    required: true
+    description: "List of document names to retrieve (e.g. ARCHITECTURE.md, API_CONTRACTS.md)"
+  - type: repo
+    required: false
+    description: "GitHub repo in owner/repo format; used to read .forge/plans/ files"
+  - type: confluence_space
+    required: false
+    description: "Confluence space key; used if document not found in repo"
+  - type: branch
+    required: false
+    description: "Git branch to read from; defaults to main"
+
+outputs:
+  - type: documents
+    validation: at_least_one_document_returned
+  - type: missing_documents
+    validation: empty_list_on_full_success
+
+llm:
+  preferred: claude-haiku
+  minimum_tier: fast
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 2000
+    max_output: 500
+
+autonomy_level: 3
+estimated_duration: "less than 1 minute"

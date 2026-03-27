@@ -1,0 +1,32 @@
+# Azure-specific Helm values overlay
+# Usage: helm install forge ./deployments/helm/forge -f values.yaml -f values.azure.yaml
+
+global:
+  cloud: azure
+
+externalDatabase:
+  # Replace with your Azure PostgreSQL Flexible Server FQDN after terraform apply
+  host: "forge-COMPANY_ID-ENV.postgres.database.azure.com"
+  existingSecret: forge-db-credentials
+
+serviceAccount:
+  annotations:
+    # Replace with the Azure Managed Identity client ID
+    azure.workload.identity/client-id: "MANAGED_IDENTITY_CLIENT_ID"
+
+podLabels:
+  azure.workload.identity/use: "true"
+
+ingress:
+  enabled: true
+  className: azure-application-gateway
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+
+storage:
+  secretsBackend: azure-key-vault
+  azureKeyVault:
+    # Replace with your Key Vault name after terraform apply
+    name: "forge-kv-COMPANY_ID"
+    tenantId: "AZURE_TENANT_ID"

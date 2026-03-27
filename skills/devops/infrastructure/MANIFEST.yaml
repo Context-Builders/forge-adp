@@ -1,0 +1,48 @@
+agent_role: devops
+skill_name: infrastructure
+version: 1.0.0
+description: "Create and modify infrastructure-as-code (Terraform, Pulumi) for cloud resources"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+    - terraform_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket describing the infrastructure change"
+  - type: infra_spec
+    required: false
+    description: "Description of resources to create, modify, or destroy"
+  - type: cloud_provider
+    required: false
+    description: "One of: aws, gcp, azure. Inferred from existing IaC if absent."
+  - type: iac_tool
+    required: false
+    description: "One of: terraform, pulumi. Inferred from project if absent."
+
+outputs:
+  - type: iac_files
+    validation: terraform_plan_passes
+  - type: pull_request
+    validation: approved_by_devops_lead_and_secops
+  - type: plan_output
+    validation: no_destructive_changes_without_explicit_approval
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 25000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "30-90 minutes"

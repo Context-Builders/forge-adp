@@ -1,0 +1,45 @@
+agent_role: secops
+skill_name: access-review
+version: 1.0.0
+description: "Audit IAM roles, service accounts, and access permissions; flag over-privileged principals"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - github_api
+    - jira_api
+    - aws_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket requesting or triggering the access review"
+  - type: scope
+    required: false
+    description: "One of: all, iam, service-accounts, github-permissions. Defaults to all."
+  - type: environment
+    required: false
+    description: "Cloud environment to audit: dev, staging, production. Defaults to production."
+
+outputs:
+  - type: access_report
+    validation: all_principals_reviewed
+  - type: findings
+    validation: jira_tickets_created_for_critical_and_high
+  - type: remediation_prs
+    validation: iac_changes_proposed_for_auto_remediable_findings
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "30-90 minutes"

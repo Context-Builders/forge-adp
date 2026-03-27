@@ -1,0 +1,49 @@
+agent_role: common
+skill_name: jira-interaction
+version: 1.0.0
+description: "Create, update, and transition Jira tickets; add comments and attachments"
+
+dependencies:
+  skills: []
+  tools:
+    - jira_api
+
+inputs:
+  - type: action
+    required: true
+    description: "One of: create_ticket, update_ticket, transition_ticket, add_comment, get_ticket"
+  - type: project_key
+    required: true
+    description: "Jira project key (e.g. ACME)"
+  - type: ticket_id
+    required: false
+    description: "Jira ticket ID (e.g. ACME-1234); required for update/transition/comment/get"
+  - type: ticket_data
+    required: false
+    description: "Fields for create or update: summary, description, type, priority, labels, assignee"
+  - type: transition
+    required: false
+    description: "Target workflow state name; required for transition_ticket"
+  - type: comment
+    required: false
+    description: "Comment body in Jira markdown; required for add_comment"
+
+outputs:
+  - type: ticket
+    validation: ticket_must_exist_in_project
+  - type: comment
+    validation: comment_id_returned
+  - type: transition_result
+    validation: new_status_matches_target
+
+llm:
+  preferred: claude-haiku
+  minimum_tier: fast
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 4000
+    max_output: 2000
+
+autonomy_level: 2
+estimated_duration: "1-3 minutes"

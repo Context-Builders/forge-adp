@@ -1,0 +1,15 @@
+{
+  "input": {
+    "jira_ticket": "DB-060",
+    "schema_change_spec": "Add 'currency' VARCHAR(3) NOT NULL DEFAULT 'USD' to payments table. Add index on (customer_id, currency).",
+    "migration_tool": "goose"
+  },
+  "output": {
+    "branch": "forge/dba/DB-060-schema-migration",
+    "pr_number": 510,
+    "files_created": [
+      "internal/db/migrations/000002_add_currency_to_payments.up.sql",
+      "internal/db/migrations/000002_add_currency_to_payments.down.sql"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1240",
+    "service_spec": "Stripe API v3 — create PaymentIntent, capture, refund",
+    "integration_type": "rest_client"
+  },
+  "output": {
+    "branch": "forge/backend-developer/PAY-1240-stripe-adapter",
+    "pr_number": 352,
+    "files_created": [
+      "adapters/stripe/client.go",
+      "adapters/stripe/client_test.go",
+      "adapters/stripe/fixtures/create_payment_intent_200.json"
+    ]
+  }
+}

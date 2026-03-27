@@ -1,0 +1,20 @@
+{
+  "input": {
+    "jira_ticket": "DB-055",
+    "slow_queries": [
+      "SELECT * FROM payments WHERE customer_id = $1 AND status = 'CAPTURED' ORDER BY created_at DESC LIMIT 20"
+    ],
+    "schema": "CREATE TABLE payments (id UUID, customer_id UUID, status VARCHAR(20), amount DECIMAL, created_at TIMESTAMPTZ);"
+  },
+  "output": {
+    "optimized_queries": [
+      "SELECT id, amount, status, created_at FROM payments WHERE customer_id = $1 AND status = 'CAPTURED' ORDER BY created_at DESC LIMIT 20"
+    ],
+    "index_recommendations": [
+      "CREATE INDEX CONCURRENTLY idx_payments_customer_status_created ON payments(customer_id, status, created_at DESC);"
+    ],
+    "branch": "forge/dba/DB-055-query-optimization",
+    "pr_number": 501,
+    "estimated_speedup": "~40x on p99"
+  }
+}

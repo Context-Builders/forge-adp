@@ -1,0 +1,46 @@
+agent_role: sre
+skill_name: incident-response
+version: 1.0.0
+description: "Coordinate incident response: triage alerts, coordinate runbook execution, and write post-mortems"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - jira_api
+    - slack_api
+    - pagerduty_api
+    - datadog_api
+
+inputs:
+  - type: incident_trigger
+    required: true
+    description: "PagerDuty incident ID, alert payload, or description of the incident"
+  - type: severity
+    required: false
+    description: "One of: sev1, sev2, sev3. Inferred from alert payload if absent."
+  - type: affected_services
+    required: false
+    description: "List of service names confirmed or suspected to be affected"
+
+outputs:
+  - type: incident_ticket
+    validation: jira_incident_ticket_created
+  - type: timeline
+    validation: chronological_events_recorded
+  - type: post_mortem
+    validation: completed_within_48h_of_resolution_for_sev1_sev2
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 20000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "ongoing — minutes to hours depending on severity"

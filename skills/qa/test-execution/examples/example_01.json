@@ -1,0 +1,18 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1285",
+    "test_suite": "integration",
+    "target_environment": "staging",
+    "test_filter": "payments"
+  },
+  "output": {
+    "total_tests": 47,
+    "passed": 44,
+    "failed": 2,
+    "skipped": 1,
+    "pass_rate": 93.6,
+    "new_bug_tickets": ["PAY-1286", "PAY-1287"],
+    "jira_comment_added": true,
+    "slack_notification_ts": "1708531400.000100"
+  }
+}

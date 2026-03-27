@@ -1,0 +1,31 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1234",
+    "api_contract": {
+      "path": "/api/v1/payments/{id}",
+      "method": "GET",
+      "response": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "CAPTURED", "REFUNDED"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "errors": {
+        "404": "Payment not found",
+        "401": "Unauthorized"
+      }
+    }
+  },
+  "output": {
+    "branch": "forge/backend-developer/PAY-1234-get-payment",
+    "pr_number": 347,
+    "files_created": [
+      "handlers/payments.go",
+      "handlers/payments_test.go"
+    ]
+  }
+}

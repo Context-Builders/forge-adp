@@ -1,0 +1,49 @@
+agent_role: sre
+skill_name: capacity-planning
+version: 1.0.0
+description: "Analyze resource utilization trends and generate capacity recommendations and scaling plans"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - jira_api
+    - datadog_api
+    - grafana_api
+    - kubernetes_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket requesting the capacity review"
+  - type: services
+    required: false
+    description: "List of service names to analyze. Defaults to all production services."
+  - type: planning_horizon
+    required: false
+    description: "Horizon in days for capacity projections. Defaults to 90."
+  - type: growth_assumption_pct
+    required: false
+    description: "Assumed monthly traffic growth percentage. Defaults to 20."
+
+outputs:
+  - type: capacity_report
+    validation: covers_all_requested_services
+  - type: scaling_recommendations
+    validation: recommendations_actionable_with_cost_estimates
+  - type: jira_tickets
+    validation: action_items_created_for_high_risk_findings
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 20000
+    max_output: 6000
+
+autonomy_level: 1
+estimated_duration: "30-90 minutes"

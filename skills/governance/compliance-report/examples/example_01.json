@@ -1,0 +1,28 @@
+{
+  "input": {
+    "period": "P7D",
+    "project_id": "proj-123",
+    "jira_ticket": "GOV-010"
+  },
+  "output": {
+    "period": "2026-02-15/2026-02-22",
+    "policy_adherence": {
+      "backend-developer": 0.97,
+      "devops": 0.94,
+      "qa": 1.0,
+      "dba": 0.96
+    },
+    "quality_gate_pass_rates": {
+      "unit_tests_pass": 0.91,
+      "lint_pass": 0.99,
+      "coverage_threshold_met": 0.85
+    },
+    "cost_usd": 312.50,
+    "budget_utilisation": 0.63,
+    "hitl_approval_rate": 1.0,
+    "hitl_median_latency_hours": 3.2,
+    "critical_findings": [],
+    "report_url": "https://jira.example.com/browse/GOV-010",
+    "slack_posted": true
+  }
+}

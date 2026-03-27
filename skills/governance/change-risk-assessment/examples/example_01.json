@@ -1,0 +1,33 @@
+{
+  "input": {
+    "task_payload": {
+      "skill_name": "deployment",
+      "input": {
+        "environment": "production",
+        "manifest": "k8s/payments-service.yaml"
+      }
+    },
+    "agent_role": "devops",
+    "jira_ticket": "REL-204"
+  },
+  "output": {
+    "risk_score": 5.2,
+    "change_type": "kubernetes-deployment",
+    "blast_radius": {
+      "services": ["payments", "notifications"],
+      "environments": ["production"],
+      "estimated_user_impact_pct": 15
+    },
+    "prerequisite_checks": {
+      "rollback_plan": true,
+      "maintenance_window": false,
+      "feature_flags": true
+    },
+    "approval_recommendation": "conditional",
+    "mitigations": [
+      "Schedule a maintenance window before proceeding",
+      "Confirm on-call SRE is available during rollout"
+    ],
+    "report_markdown": "## Risk Assessment: REL-204\n\n**Score**: 5.2/10 — Conditional\n..."
+  }
+}

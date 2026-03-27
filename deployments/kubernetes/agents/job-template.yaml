@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: forge-agent-${TASK_ID}
+  namespace: forge-agents
+  labels:
+    app: forge-agent
+    forge.io/agent-role: ${AGENT_ROLE}
+    forge.io/task-id: ${TASK_ID}
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: forge-agent
+        forge.io/agent-role: ${AGENT_ROLE}
+    spec:
+      nodeSelector:
+        forge.io/node-type: agent-runtime
+      tolerations:
+        - key: "forge.io/agent-only"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      restartPolicy: Never
+      containers:
+        - name: agent
+          image: forge/agents:latest
+          command: ["python", "-m", "forge_agents.runner"]
+          env:
+            - name: AGENT_ROLE
+              value: "${AGENT_ROLE}"
+            - name: TASK_PAYLOAD
+              value: '${TASK_PAYLOAD}'
+            - name: REPO
+              value: "${REPO}"
+            - name: PLATFORM_REPOS
+              value: "${PLATFORM_REPOS}"
+            - name: FORGE_COMPANY_ID
+              value: "${COMPANY_ID}"
+            - name: FORGE_PROJECT_ID
+              value: "${PROJECT_ID}"
+            - name: FORGE_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-credentials
+                  key: DATABASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: forge-credentials
+                  key: ANTHROPIC_API_KEY
+            - name: GITHUB_ADAPTER_URL
+              value: "http://github-adapter.forge-integrations:19091"
+            - name: EVENT_BUS_URL
+              value: "http://orchestrator.forge-control-plane:19080"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 5Gi

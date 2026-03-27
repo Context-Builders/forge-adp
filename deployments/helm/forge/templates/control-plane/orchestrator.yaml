@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-orchestrator
+  namespace: forge-control-plane
+  labels:
+    app: forge-orchestrator
+spec:
+  replicas: {{ .Values.controlPlane.orchestrator.replicas }}
+  selector:
+    matchLabels:
+      app: forge-orchestrator
+  template:
+    metadata:
+      labels:
+        app: forge-orchestrator
+    spec:
+      nodeSelector:
+        forge.io/node-type: control-plane
+      containers:
+        - name: orchestrator
+          image: {{ .Values.global.imageRegistry }}/{{ .Values.controlPlane.orchestrator.image.repository }}:{{ .Values.controlPlane.orchestrator.image.tag }}
+          ports:
+            - containerPort: {{ .Values.controlPlane.orchestrator.port }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-credentials
+                  key: DATABASE_URL
+            - name: REDIS_ADDR
+              value: "redis:6379"
+          resources:
+            requests:
+              memory: {{ .Values.controlPlane.orchestrator.resources.requests.memory | quote }}
+              cpu: {{ .Values.controlPlane.orchestrator.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.controlPlane.orchestrator.resources.limits.memory | quote }}
+              cpu: {{ .Values.controlPlane.orchestrator.resources.limits.cpu | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.controlPlane.orchestrator.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.controlPlane.orchestrator.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: forge-control-plane
+spec:
+  selector:
+    app: forge-orchestrator
+  ports:
+    - port: {{ .Values.controlPlane.orchestrator.port }}
+      targetPort: {{ .Values.controlPlane.orchestrator.port }}

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge-control-plane
+  labels:
+    app.kubernetes.io/part-of: forge
+    forge.io/component: control-plane
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge-agents
+  labels:
+    app.kubernetes.io/part-of: forge
+    forge.io/component: agent-runtime
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge-integrations
+  labels:
+    app.kubernetes.io/part-of: forge
+    forge.io/component: integrations

@@ -1,0 +1,13 @@
+{
+  "input": {
+    "jira_ticket": "PAY-1260",
+    "test_scope": ["refund-api", "refund-ui", "email-notifications"],
+    "risk_areas": ["partial refund calculations", "concurrent refund requests"]
+  },
+  "output": {
+    "test_cases_created": 18,
+    "jira_tickets_created": ["PAY-1290", "PAY-1291", "PAY-1292"],
+    "confluence_page_url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/234567",
+    "estimated_execution_hours": 6.5
+  }
+}

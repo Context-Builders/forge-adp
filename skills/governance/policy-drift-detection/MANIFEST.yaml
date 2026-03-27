@@ -1,0 +1,46 @@
+agent_role: governance
+skill_name: policy-drift-detection
+version: 1.0.0
+description: "Compare observed agent actions against OPA policy rules to surface behaviours that fall outside policy intent, including gaps where actions succeed but should require human review"
+
+dependencies:
+  skills:
+    - common/plan-reader
+    - common/slack-communication
+    - common/jira-interaction
+  tools:
+    - postgres_api
+    - github_api
+    - slack_api
+    - jira_api
+
+inputs:
+  - type: period
+    required: false
+    description: "ISO 8601 duration to analyse. Defaults to P30D."
+  - type: project_id
+    required: true
+    description: "Forge project ID to scope the analysis."
+  - type: opa_bundle_path
+    required: false
+    description: "Path to the OPA bundle to compare against. Defaults to deployments/opa/forge.rego."
+
+outputs:
+  - type: drift_report
+    validation: report_has_summary_and_gaps
+  - type: policy_gaps
+    validation: gaps_have_severity_and_recommendation
+  - type: remediation_prs
+    validation: pr_created_for_auto_remediable_gaps
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 25000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "20-60 minutes"

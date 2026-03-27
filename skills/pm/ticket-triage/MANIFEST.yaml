@@ -1,0 +1,39 @@
+agent_role: pm
+skill_name: ticket-triage
+version: 1.0.0
+description: "Review incoming Jira tickets for completeness, assign priorities, and route to the correct agent"
+
+dependencies:
+  skills:
+    - common/jira-interaction
+    - common/slack-communication
+    - common/plan-reader
+  tools:
+    - jira_api
+    - slack_api
+
+inputs:
+  - type: ticket_ids
+    required: true
+    description: "List of Jira ticket IDs to triage"
+  - type: triage_criteria
+    required: false
+    description: "Custom rules for priority assignment; uses defaults if absent"
+
+outputs:
+  - type: triage_results
+    validation: all_tickets_have_assigned_priority_and_agent
+  - type: clarification_requests
+    validation: questions_posted_to_slack_for_incomplete_tickets
+
+llm:
+  preferred: claude-sonnet
+  minimum_tier: standard
+  fallback:
+    - claude-haiku
+  token_budget:
+    max_input: 15000
+    max_output: 4000
+
+autonomy_level: 2
+estimated_duration: "5-20 minutes"

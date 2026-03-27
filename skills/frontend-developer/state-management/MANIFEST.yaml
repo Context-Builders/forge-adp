@@ -1,0 +1,47 @@
+agent_role: frontend-developer
+skill_name: state-management
+version: 1.0.0
+description: "Implement global or feature-scoped state management slices, stores, and selectors"
+
+dependencies:
+  skills:
+    - common/github-interaction
+    - common/plan-reader
+    - common/jira-interaction
+  tools:
+    - github_api
+    - jira_api
+
+inputs:
+  - type: jira_ticket
+    required: true
+    description: "Jira ticket describing state requirements"
+  - type: state_spec
+    required: false
+    description: "Description of state shape, actions, and selectors needed"
+  - type: state_library
+    required: false
+    description: "State management library in use: redux, zustand, jotai, context. Inferred from project if absent."
+  - type: affected_features
+    required: false
+    description: "List of feature names that will consume this state"
+
+outputs:
+  - type: feature_branch
+    validation: must_pass_ci
+  - type: pull_request
+    validation: must_include_tests
+  - type: store_files
+    validation: types_checked
+
+llm:
+  preferred: claude-opus
+  minimum_tier: standard
+  fallback:
+    - claude-sonnet
+  token_budget:
+    max_input: 30000
+    max_output: 8000
+
+autonomy_level: 1
+estimated_duration: "45-120 minutes"

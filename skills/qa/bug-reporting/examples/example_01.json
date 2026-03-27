@@ -1,0 +1,14 @@
+{
+  "input": {
+    "failure_evidence": "FAIL: TestRefundPayment\npanic: runtime error: index out of range [0] with length 0\ngoroutine 1 [running]:\npayments/service.(*PaymentService).Refund(...)\n  payments/service/payment_service.go:142",
+    "reproduction_steps": ["Create a payment", "Attempt to refund with amount=0"],
+    "environment": "staging",
+    "severity": "high"
+  },
+  "output": {
+    "ticket_id": "PAY-1280",
+    "url": "https://acme.atlassian.net/browse/PAY-1280",
+    "severity": "high",
+    "slack_notification_ts": "1708531300.000100"
+  }
+}

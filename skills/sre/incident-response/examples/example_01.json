@@ -1,0 +1,15 @@
+{
+  "input": {
+    "incident_trigger": "PD-12345: payments-api error rate >5% (threshold 1%) — P1 alert",
+    "severity": "sev1",
+    "affected_services": ["payments-api"]
+  },
+  "output": {
+    "incident_ticket": "INC-021",
+    "slack_channel": "#incident-INC-021",
+    "severity_classified": "sev1",
+    "runbook_suggested": "payments-api-high-error-rate-runbook",
+    "timeline_events_recorded": 4,
+    "post_mortem_url": null
+  }
+}

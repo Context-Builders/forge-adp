@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS llm_usage;
+DROP TABLE IF EXISTS agent_memory;
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS task_dependencies;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS skills;
+DROP TABLE IF EXISTS policies;
+DROP TABLE IF EXISTS agents;

@@ -1,0 +1,20 @@
+{
+  "input": {
+    "jira_ticket": "SEC-045",
+    "scope": "iam",
+    "environment": "production"
+  },
+  "output": {
+    "principals_reviewed": 38,
+    "findings": [
+      {
+        "severity": "high",
+        "principal": "arn:aws:iam::123456789:role/payments-worker",
+        "issue": "Has s3:* on all buckets",
+        "ticket": "SEC-046"
+      }
+    ],
+    "auto_remediation_prs": [],
+    "report_posted": true
+  }
+}
