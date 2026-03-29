@@ -25,6 +25,7 @@ Forge ADP connects product owners to a fleet of specialized AI agents — each r
 - [Configuration](#configuration)
 - [API & Command Reference](#api--command-reference)
   - [Enabling an Adapter](#enabling-an-adapter)
+- [Stopping & Removing](#stopping--removing)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -929,6 +930,36 @@ Agents communicate through structured events on the message bus:
 | `review.approved` / `review.rejected` | Review outcome |
 | `deployment.requested` / `deployment.approved` | Deployment lifecycle |
 | `escalation.created` | Issue surfaced to human decision-maker |
+
+---
+
+## Stopping & Removing
+
+A `teardown.sh` script handles both stopping the platform and optionally purging all data and artifacts.
+
+**Stop all running processes and containers:**
+
+```bash
+./teardown.sh
+```
+
+This kills all Go services, Python agent dispatchers, and stops the Docker containers (Postgres, Redis, MinIO) while preserving their data volumes.
+
+**Stop everything and remove all data and artifacts:**
+
+```bash
+./teardown.sh --purge
+```
+
+This additionally removes Docker volumes (all DB/Redis/MinIO data), Docker images, build artifacts, and the Python virtual environment.
+
+To delete the project directory itself after purging:
+
+```bash
+rm -rf /path/to/forge-adp
+```
+
+> **Cloud deployments:** Run `make destroy-aws`, `make destroy-gcp`, or `make destroy-azure` before deleting the directory — these run `terraform destroy` and require the Terraform state files to be present.
 
 ---
 
