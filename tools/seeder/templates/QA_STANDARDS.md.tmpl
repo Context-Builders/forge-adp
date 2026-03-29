@@ -1,0 +1,74 @@
+# {{.ProjectName}} — QA Standards
+
+*Testing and linting requirements for all code agents. These are non-negotiable — a PR that does not meet these standards must not be opened.*
+
+## Testing Pyramid
+{{- if .HasProfile}}
+
+| Layer | Tool | When Required |
+|-------|------|---------------|
+{{- if .Profile.QA.UnitFrontend}}
+| Unit (frontend) | {{.Profile.QA.UnitFrontend}} | Every component, hook, and utility function |
+{{- end}}
+| Unit (backend) | {{.Profile.QA.UnitBackend}} | Every function containing business logic |
+| Integration | {{.Profile.QA.Integration}} | All database interactions and external service calls |
+{{- if .Profile.QA.E2E}}
+| E2E | {{.Profile.QA.E2E}} | All critical user journeys and happy paths |
+{{- end}}
+{{- else}}
+<!-- Define your testing layers: unit, integration, E2E — tools and when each is required -->
+{{- end}}
+
+## Coverage Threshold
+{{- if .HasProfile}}
+Minimum: **{{.Profile.QA.CoverageThreshold}}%** line coverage, enforced in CI.
+
+Coverage must not decrease on any PR. New code below threshold blocks merge.
+{{- else}}
+<!-- Minimum coverage percentage, enforced in CI -->
+{{- end}}
+
+## Linting
+{{- if .HasProfile}}
+{{- if .Profile.QA.LintFrontend}}
+- **Frontend:** {{.Profile.QA.LintFrontend}} — zero warnings policy
+{{- end}}
+{{- if .Profile.QA.LintBackend}}
+- **Backend:** {{.Profile.QA.LintBackend}} — zero warnings policy
+{{- end}}
+
+Lint must pass before tests are run. A lint failure is a build failure.
+{{- else}}
+<!-- Linting tools and zero-warning policy -->
+{{- end}}
+
+## CI Gates
+
+All PRs must pass in this order:
+1. [ ] Lint (fast fail)
+2. [ ] Type check (if applicable)
+3. [ ] Unit tests
+4. [ ] Integration tests
+5. [ ] Coverage threshold check
+{{- if .HasProfile}}
+{{- if .Profile.QA.E2E}}
+6. [ ] E2E tests (on merge to main only)
+{{- end}}
+{{- end}}
+
+## Test Writing Rules
+
+- Tests live alongside source code (`_test.go`, `*.test.ts`, `test_*.py`)
+- No mocking of the database in integration tests — use {{- if .HasProfile}} {{.Profile.QA.Integration}}{{- else}} real containers{{- end}}
+- Every bug fix includes a regression test
+- Test names describe behavior, not implementation (`TestCharge_DeclinedCard`, not `TestChargeFunc3`)
+
+## Anti-Patterns
+
+- Do not skip tests with `t.Skip()` / `it.skip()` without a linked ticket
+- Do not use `time.Sleep` in tests — use retry loops or event-driven assertions
+- Do not assert on exact timestamps — use time windows
+
+---
+
+*Read by backend-developer, frontend-developer, and QA agents before writing any code or tests.*

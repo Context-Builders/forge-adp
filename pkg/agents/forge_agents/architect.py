@@ -44,12 +44,29 @@ class RequirementsAnalysisSkill(Skill):
         lines.append("\nEach repo's tech stack is defined in its own .forge/config.yaml.")
         return "\n".join(lines)
 
+    def _build_standards_context(self, context: SkillContext) -> str:
+        """Build a standards context block from org standards documents."""
+        db = context.plan_documents.get("DB_CONVENTIONS.md", "")
+        qa = context.plan_documents.get("QA_STANDARDS.md", "")
+        obs = context.plan_documents.get("OBSERVABILITY.md", "")
+        if not any([db, qa, obs]):
+            return ""
+        parts = ["\n## Org Standards (non-negotiable — apply to all decisions)"]
+        if db:
+            parts.append(f"\n### DB Conventions\n{db[:1500]}")
+        if qa:
+            parts.append(f"\n### QA Standards\n{qa[:1000]}")
+        if obs:
+            parts.append(f"\n### Observability Standards\n{obs[:1000]}")
+        return "\n".join(parts)
+
     def execute(self, context: SkillContext, llm: LLMProvider) -> dict:
         product_brief = context.task.input_payload.get("product_brief", "")
         product_md = context.plan_documents.get("PRODUCT.md", "")
         config_yaml = context.plan_documents.get("config.yaml", "")
         platform = context.task.input_payload.get("platform")
         platform_context = self._build_platform_context(platform)
+        standards_context = self._build_standards_context(context)
 
         system_prompt = self.build_system_prompt(context)
         system_prompt += (
@@ -98,6 +115,7 @@ Analyse the following product brief and produce structured requirements.
 ## Project Config
 {config_yaml[:2000] if config_yaml else "(not available)"}
 {platform_context}
+{standards_context}
 
 ## Instructions
 1. Extract functional requirements — each must be specific, testable, and prioritised (Must/Should/Could).
@@ -184,14 +202,39 @@ class ArchitectureDesignSkill(Skill):
         lines.append("\nEach repo's tech stack is defined in its own .forge/config.yaml.")
         return "\n".join(lines)
 
+    def _build_standards_context(self, context: SkillContext) -> str:
+        """Build a standards context block from org standards documents."""
+        db = context.plan_documents.get("DB_CONVENTIONS.md", "")
+        qa = context.plan_documents.get("QA_STANDARDS.md", "")
+        obs = context.plan_documents.get("OBSERVABILITY.md", "")
+        if not any([db, qa, obs]):
+            return ""
+        parts = ["\n## Org Standards (non-negotiable — apply to all decisions)"]
+        if db:
+            parts.append(f"\n### DB Conventions\n{db[:2000]}")
+        if qa:
+            parts.append(f"\n### QA Standards\n{qa[:1000]}")
+        if obs:
+            parts.append(f"\n### Observability Standards\n{obs[:1000]}")
+        return "\n".join(parts)
+
     def execute(self, context: SkillContext, llm: LLMProvider) -> dict:
-        requirements = context.task.input_payload.get("requirements", {})
+        # Prefer live upstream requirements-analysis output over the static
+        # input_payload "requirements" key, which is typically empty when the
+        # task was auto-unblocked after requirements-analysis completed.
+        upstream_req_output = context.dependency_outputs.get("requirements-analysis", {})
+        if upstream_req_output:
+            requirements = upstream_req_output
+        else:
+            requirements = context.task.input_payload.get("requirements", {})
+
         product_brief = context.task.input_payload.get("product_brief", "")
         config_yaml = context.plan_documents.get("config.yaml", "")
         arch_stub = context.plan_documents.get("ARCHITECTURE.md", "")
         data_model_stub = context.plan_documents.get("DATA_MODEL.md", "")
         platform = context.task.input_payload.get("platform")
         platform_context = self._build_platform_context(platform)
+        standards_context = self._build_standards_context(context)
 
         system_prompt = self.build_system_prompt(context)
         system_prompt += (
@@ -232,6 +275,12 @@ class ArchitectureDesignSkill(Skill):
             )
             platform_instructions = ""
 
+        req_source_note = (
+            "(sourced from upstream requirements-analysis output)"
+            if upstream_req_output
+            else "(sourced from task input_payload)"
+        )
+
         messages = [
             {
                 "role": "user",
@@ -241,12 +290,13 @@ Design the system architecture and data model for this project.
 ## Product Brief
 {product_brief[:2000]}
 
-## Requirements
+## Requirements {req_source_note}
 {json.dumps(requirements, indent=2)[:4000]}
 
 ## Project Config
 {config_yaml[:2000] if config_yaml else "(not available)"}
 {platform_context}
+{standards_context}
 
 ## Current ARCHITECTURE.md Stub
 {arch_stub[:1000]}
@@ -331,14 +381,35 @@ class APIDesignSkill(Skill):
         lines.append("\nEach repo's tech stack is defined in its own .forge/config.yaml.")
         return "\n".join(lines)
 
+    def _build_standards_context(self, context: SkillContext) -> str:
+        """Build a standards context block from org standards documents."""
+        obs = context.plan_documents.get("OBSERVABILITY.md", "")
+        qa = context.plan_documents.get("QA_STANDARDS.md", "")
+        if not any([obs, qa]):
+            return ""
+        parts = ["\n## Org Standards (non-negotiable — apply to all decisions)"]
+        if obs:
+            parts.append(f"\n### Observability Standards\n{obs[:1000]}")
+        if qa:
+            parts.append(f"\n### QA Standards\n{qa[:800]}")
+        return "\n".join(parts)
+
     def execute(self, context: SkillContext, llm: LLMProvider) -> dict:
-        requirements = context.task.input_payload.get("requirements", {})
-        entities = context.task.input_payload.get("entities", [])
+        # Prefer live upstream architecture-design output for entities and requirements.
+        upstream_arch_output = context.dependency_outputs.get("architecture-design", {})
+        if upstream_arch_output:
+            entities = upstream_arch_output.get("entities", [])
+            requirements = upstream_arch_output.get("requirements") or context.task.input_payload.get("requirements", {})
+        else:
+            entities = context.task.input_payload.get("entities", [])
+            requirements = context.task.input_payload.get("requirements", {})
+
         product_brief = context.task.input_payload.get("product_brief", "")
         config_yaml = context.plan_documents.get("config.yaml", "")
         api_stub = context.plan_documents.get("API_CONTRACTS.md", "")
         platform = context.task.input_payload.get("platform")
         platform_context = self._build_platform_context(platform)
+        standards_context = self._build_standards_context(context)
 
         system_prompt = self.build_system_prompt(context)
         system_prompt += (
@@ -373,6 +444,18 @@ class APIDesignSkill(Skill):
             api_output_spec = '"api_contracts_md": "Full markdown content for API_CONTRACTS.md",'
             platform_instructions = ""
 
+        entities_source_note = (
+            "(sourced from upstream architecture-design output)"
+            if upstream_arch_output
+            else "(from task input_payload)"
+        )
+        arch_decisions_block = ""
+        if upstream_arch_output and upstream_arch_output.get("architecture_decisions"):
+            arch_decisions_block = (
+                f"\n## Architecture Decisions (from upstream)\n"
+                f"{json.dumps(upstream_arch_output['architecture_decisions'], indent=2)[:2000]}"
+            )
+
         messages = [
             {
                 "role": "user",
@@ -385,12 +468,14 @@ Design the API surface for this project.
 ## Requirements
 {json.dumps(requirements, indent=2)[:4000]}
 
-## Known Entities
+## Known Entities {entities_source_note}
 {json.dumps(entities, indent=2)[:2000] if entities else "(pending from architecture-design)"}
+{arch_decisions_block}
 
 ## Project Config
 {config_yaml[:2000] if config_yaml else "(not available)"}
 {platform_context}
+{standards_context}
 
 ## Current API_CONTRACTS.md Stub
 {api_stub}

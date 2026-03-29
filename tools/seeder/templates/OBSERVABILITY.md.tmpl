@@ -1,0 +1,86 @@
+# {{.ProjectName}} — Observability Standards
+
+*Monitoring, logging, and alerting requirements. Every service agent must instrument code to these standards — observability is not optional.*
+
+## Tooling
+{{- if .HasProfile}}
+
+| Concern | Tool |
+|---------|------|
+| APM / Distributed Tracing | {{.Profile.Observability.APM}} |
+| Structured Logs | {{.Profile.Observability.Logs}} |
+| Metrics | {{.Profile.Observability.Metrics}} |
+{{- if .Profile.Observability.Synthetics}}
+| Synthetics / Uptime | {{.Profile.Observability.Synthetics}} |
+{{- end}}
+{{- else}}
+<!-- Define your monitoring stack: APM, logs, metrics, synthetics -->
+{{- end}}
+
+## Metric Naming Convention
+{{- if .HasProfile}}
+Pattern: **`{{.Profile.Observability.MetricNaming}}`**
+
+Rules:
+- All segments lowercase, dot-separated
+- `service` = the name of this service (from `forge.project_id` in config.yaml)
+- `operation` = the specific action (e.g. `charge`, `login`, `fetch_user`)
+- `result` = `success`, `failure`, or `error`
+
+Examples:
+- `{{.ProjectID}}.charge.success`
+- `{{.ProjectID}}.charge.failure`
+- `{{.ProjectID}}.db_query.duration` (use `.duration` suffix for timers)
+{{- else}}
+<!-- Define metric naming pattern, e.g. service.operation.result -->
+{{- end}}
+
+## Structured Logging
+
+Every log line must include these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `service` | string | Service name (matches `forge.project_id`) |
+| `trace_id` | string | Propagated from request context |
+| `span_id` | string | Current span ID |
+| `level` | string | `debug`, `info`, `warn`, `error` |
+| `msg` | string | Human-readable message |
+| `error` | string | Error message (on error logs only) |
+
+**Never log PII** (emails, names, phone numbers, payment details). Never log secrets or tokens.
+
+## Required Instrumentation
+
+Every service must instrument:
+
+- [ ] **Request duration** — histogram, tagged by endpoint and status code
+- [ ] **Error rate** — counter, tagged by error type
+- [ ] **Dependency health** — DB connection pool stats, cache hit/miss ratio, external API latency
+- [ ] **Business events** — domain-specific metrics (e.g. `payments.charge.success`)
+- [ ] **Startup / shutdown** — log service start with version and config (redacted)
+
+## SLOs
+{{- if .HasProfile}}
+{{- if .Profile.Observability.SLOEnabled}}
+SLO definitions are **required** for all user-facing endpoints. Define in ARCHITECTURE.md:
+
+- Availability target (e.g. 99.9%)
+- Latency target (e.g. p95 < 200ms)
+- Error budget policy (e.g. alert at 10% burn rate over 1h)
+{{- else}}
+SLOs are not required for this profile. Define informally in ARCHITECTURE.md if applicable.
+{{- end}}
+{{- else}}
+<!-- Are SLOs required? Define targets and error budget policy -->
+{{- end}}
+
+## Alerting
+
+- Alerts must have a runbook link
+- Alert on symptoms (high error rate, latency), not causes (CPU usage)
+- Every on-call alert must be actionable — no alert without a response action
+
+---
+
+*Read by backend-developer and devops agents before implementing any service or infrastructure.*

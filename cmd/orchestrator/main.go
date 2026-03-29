@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,9 +12,12 @@ import (
 	"github.com/dotrage/forge-adp/internal/orchestrator"
 	"github.com/dotrage/forge-adp/pkg/config"
 	"github.com/dotrage/forge-adp/pkg/events"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 func main() {
+	logger.Init("orchestrator")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -23,7 +26,8 @@ func main() {
 		"forge:events",
 	)
 	if err != nil {
-		log.Fatalf("failed to create event bus: %v", err)
+		slog.Error("failed to create event bus", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer bus.Close()
 
@@ -37,7 +41,8 @@ func main() {
 		CompanyID:   companyID,
 	})
 	if err != nil {
-		log.Fatalf("failed to create orchestrator: %v", err)
+		slog.Error("failed to create orchestrator", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -46,22 +51,27 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/api/v1/tasks", orch.HandleTasks)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", orch.HandleGetTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/approve", orch.HandleApproveTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/reject", orch.HandleRejectTask)
 	mux.HandleFunc("/api/v1/assign", orch.HandleAssignment)
 
 	addr := config.OrchestratorPort()
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: logger.HTTPMiddleware("orchestrator", mux),
 	}
 
 	go func() {
-		log.Printf("orchestrator listening on %s", addr)
+		slog.Info("orchestrator listening", slog.String("addr", addr))
 		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("http server error: %v", err)
+			slog.Error("http server error", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}()
 
 	go orch.ProcessEvents(ctx)
+	go orch.RunWatchdog(ctx)
 
 	// ----------------------------------------------------------------
 	// Governance scheduler — fires compliance-report (weekly) and
@@ -87,6 +97,6 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	log.Println("shutting down orchestrator...")
+	slog.Info("shutting down orchestrator")
 	server.Shutdown(ctx)
 }

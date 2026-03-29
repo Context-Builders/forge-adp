@@ -58,6 +58,13 @@ export interface SubmitTaskParams {
   autonomy_level?: number;
 }
 
+export interface BootstrapProjectParams {
+  repo: string;
+  product_brief: string;
+  profile?: string;
+  ticket_id?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -141,7 +148,7 @@ export class OrchestratorClient {
   // ---- Orchestrator -------------------------------------------------------
 
   async submitTask(params: SubmitTaskParams): Promise<ForgeTask> {
-    return this.request<ForgeTask>(this.orchestratorUrl, "/v1/tasks", {
+    return this.request<ForgeTask>(this.orchestratorUrl, "/api/v1/tasks", {
       method: "POST",
       body: params,
     });
@@ -150,7 +157,7 @@ export class OrchestratorClient {
   async getTask(taskId: string): Promise<ForgeTask> {
     return this.request<ForgeTask>(
       this.orchestratorUrl,
-      `/v1/tasks/${taskId}`
+      `/api/v1/tasks/${taskId}`
     );
   }
 
@@ -164,7 +171,7 @@ export class OrchestratorClient {
     const qs = params.toString();
     const tasks = await this.request<ForgeTask[] | { tasks: ForgeTask[] }>(
       this.orchestratorUrl,
-      `/v1/tasks${qs ? `?${qs}` : ""}`
+      `/api/v1/tasks${qs ? `?${qs}` : ""}`
     );
     return Array.isArray(tasks) ? tasks : tasks.tasks ?? [];
   }
@@ -175,7 +182,7 @@ export class OrchestratorClient {
   ): Promise<ForgeTask> {
     return this.request<ForgeTask>(
       this.orchestratorUrl,
-      `/v1/tasks/${taskId}/approve`,
+      `/api/v1/tasks/${taskId}/approve`,
       { method: "POST", body: comment ? { comment } : undefined }
     );
   }
@@ -183,7 +190,7 @@ export class OrchestratorClient {
   async rejectTask(taskId: string, reason: string): Promise<ForgeTask> {
     return this.request<ForgeTask>(
       this.orchestratorUrl,
-      `/v1/tasks/${taskId}/reject`,
+      `/api/v1/tasks/${taskId}/reject`,
       { method: "POST", body: { reason } }
     );
   }
@@ -191,8 +198,28 @@ export class OrchestratorClient {
   async health(): Promise<{ status: string }> {
     return this.request<{ status: string }>(
       this.orchestratorUrl,
-      "/v1/health"
+      "/health"
     );
+  }
+
+  async bootstrapProject(params: BootstrapProjectParams): Promise<ForgeTask> {
+    return this.request<ForgeTask>(this.orchestratorUrl, "/api/v1/tasks", {
+      method: "POST",
+      body: {
+        agent_role: "pm",
+        skill_name: "project-bootstrap",
+        title: `Bootstrap plan documents for ${params.repo}`,
+        description:
+          "Populate seeded .forge/ plan documents with content derived from the product brief. Delegate technical documents to the Architect agent.",
+        jira_ticket_id: params.ticket_id,
+        repo: params.repo,
+        input: {
+          product_brief: params.product_brief,
+          repo: params.repo,
+          profile: params.profile,
+        },
+      },
+    });
   }
 
   // ---- Registry -----------------------------------------------------------
@@ -200,7 +227,7 @@ export class OrchestratorClient {
   async listAgents(): Promise<ForgeAgent[]> {
     const result = await this.request<ForgeAgent[] | { agents: ForgeAgent[] }>(
       this.registryUrl,
-      "/v1/agents"
+      "/api/v1/agents"
     );
     return Array.isArray(result) ? result : result.agents ?? [];
   }
@@ -209,7 +236,7 @@ export class OrchestratorClient {
     const qs = role ? `?role=${role}` : "";
     const result = await this.request<ForgeSkill[] | { skills: ForgeSkill[] }>(
       this.registryUrl,
-      `/v1/skills${qs}`
+      `/api/v1/skills${qs}`
     );
     return Array.isArray(result) ? result : result.skills ?? [];
   }

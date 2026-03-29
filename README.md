@@ -24,6 +24,7 @@ Forge ADP connects product owners to a fleet of specialized AI agents — each r
   - [VS Code Extension](#using-the-vs-code-extension)
 - [Configuration](#configuration)
 - [API & Command Reference](#api--command-reference)
+  - [Enabling an Adapter](#enabling-an-adapter)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -34,7 +35,7 @@ Forge ADP connects product owners to a fleet of specialized AI agents — each r
 Forge is built around four core principles:
 
 - **Ticket-Driven Execution** — Every unit of agent work traces back to a Jira ticket. No ticket, no work.
-- **Plan-Aware Context** — Agents read structured plan documents in each repository to understand the product, architecture, and constraints before acting.
+- **Plan-Aware Context** — Agents draw on three layers of context before acting: (1) structured plan documents in the repository (ARCHITECTURE.md, API_CONTRACTS.md, etc.); (2) dependency outputs — the full output of every upstream task in the current pipeline, automatically injected into the downstream task's input at unblock time; and (3) scoped agent memory — role-specific learned patterns plus project-scoped memories shared across all agent roles for high-confidence cross-cutting decisions (architecture choices, NFRs, data model entities).
 - **Skills Over Prompts** — Each agent type loads a versioned, testable skill package rather than relying on ad hoc prompting.
 - **Human-in-the-Loop by Default** — Agents propose. Humans approve. Every PR, schema migration, and deployment requires explicit human sign-off unless a team opts into progressive autonomy for specific low-risk action classes.
 
@@ -97,7 +98,7 @@ Forge is built around four core principles:
 
 **Message Bus** — Redis Streams (default) or Apache Kafka / NATS for larger deployments.
 
-**Storage** — PostgreSQL 16 for all persistent state (tasks, audit log, agent memory, LLM cost tracking). S3-compatible object store (MinIO locally) for skill packages and artifacts.
+**Storage** — PostgreSQL 16 for all persistent state (tasks, audit log, agent memory, LLM cost tracking). S3-compatible object store (MinIO locally) for skill packages and artifacts. Agent memory is scoped: `role`-scoped memories are private to the agent role that wrote them; `project`-scoped memories (auto-promoted when confidence ≥ 0.8) are readable by all agent roles within the project, enabling cross-role knowledge sharing without polluting role-specific signal.
 
 ---
 
@@ -105,36 +106,38 @@ Forge is built around four core principles:
 
 ### Tools
 
+> **Windows users:** The commands below use Homebrew (macOS/Linux). On Windows, use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) for the closest experience, or substitute `brew` with [Chocolatey](https://chocolatey.org/) / [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) equivalents shown in the comments. Replace `export VAR=value` with `$env:VAR="value"` in PowerShell. Replace `./bin/forge-seeder` with `.\bin\forge-seeder.exe`. Redis has no native Windows build — use WSL2 or [Memurai](https://www.memurai.com/).
+
 ```bash
 # Go (Control Plane)
-brew install go@1.22
+brew install go@1.22          # Windows: winget install GoLang.Go
 
 # Python (Agent Runtimes)
-brew install python@3.12
+brew install python@3.12      # Windows: winget install Python.Python.3.12
 pip install poetry
 
 # Node.js (MCP Server + VS Code Extension)
-brew install node@20   # requires Node ≥ 18
+brew install node@20          # Windows: winget install OpenJS.NodeJS  (requires Node ≥ 18)
 
 # Containers and orchestration
-brew install docker
-brew install kubectl helm k9s
+brew install docker           # Windows: Docker Desktop installer (includes Compose)
+brew install kubectl helm k9s # Windows: choco install kubernetes-cli kubernetes-helm k9s
 
 # Infrastructure
-brew install terraform
+brew install terraform        # Windows: choco install terraform
 
 # Database
-brew install postgresql@16
+brew install postgresql@16    # Windows: installer from postgresql.org
 
 # Message queue (local dev)
-brew install redis
+brew install redis            # Windows: WSL2 or Memurai (no native Windows build)
 
 # Database migrations
-go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest   # cross-platform
 
 # Code quality
-brew install golangci-lint
-pip install ruff black mypy
+brew install golangci-lint    # Windows: choco install golangci-lint
+pip install ruff black mypy   # cross-platform
 ```
 
 ### API Keys and Credentials
@@ -218,14 +221,20 @@ This starts PostgreSQL 16, Redis 7, and MinIO locally.
 ### 3. Run Database Migrations
 
 ```bash
+# macOS/Linux
 export DATABASE_URL="postgres://forge:forge_dev@localhost:5432/forge?sslmode=disable"
 migrate -database "$DATABASE_URL" -path internal/db/migrations up
+
+# Windows (PowerShell)
+# $env:DATABASE_URL="postgres://forge:forge_dev@localhost:5432/forge?sslmode=disable"
+# migrate -database $env:DATABASE_URL -path internal/db/migrations up
 ```
 
 ### 4. Build the Control Plane
 
 ```bash
 make build
+# Windows (if make is unavailable): choco install make  — or use WSL2
 ```
 
 This compiles the Orchestrator, Registry, Policy Engine, and all integration adapters into the `bin/` directory.
@@ -234,18 +243,33 @@ This compiles the Orchestrator, Registry, Policy Engine, and all integration ada
 
 ```bash
 make run-local
+# Windows (if make is unavailable): choco install make  — or use WSL2
 ```
 
 The Orchestrator starts on `:19080`, the Registry on `:19081`, and the Policy Engine on `:19082`.
 
-### 6. (Optional) Seed a Project Repository
+### 6. Seed the Registry
+
+Populate the registry with all agent roles and skill metadata:
 
 ```bash
+make seed-skills
+```
+
+This reads every `skills/<role>/<skill>/SKILL.md` file and registers the agents and skills via the Registry API. Re-running is safe — existing entries are upserted.
+
+### 7. (Optional) Seed a Project Repository
+
+```bash
+# macOS/Linux
 ./bin/forge-seeder \
   -name "My Project" \
   -company acme \
   -project my-project \
   -output ./seeded
+
+# Windows (PowerShell)
+# .\bin\forge-seeder.exe -name "My Project" -company acme -project my-project -output .\seeded
 ```
 
 This generates a `.forge/` directory with all plan document stubs for the target repository.
@@ -261,6 +285,7 @@ helm install forge deployments/helm/forge \
   --namespace forge-control-plane \
   --set global.anthropicApiKey="${ANTHROPIC_API_KEY}" \
   --set global.databaseUrl="${DATABASE_URL}"
+# Windows (PowerShell): replace ${VAR} with $env:VAR
 ```
 
 See `deployments/` for the full production deployment configuration including Terraform (EKS), Helm charts, and Kubernetes manifests.
@@ -307,7 +332,7 @@ npm run build
 
 #### Claude Code configuration
 
-Add the following to your Claude Code MCP config (`~/.claude/claude_desktop_config.json` or the workspace `.claude/settings.json`):
+Add the following to your Claude Code MCP config (macOS/Linux: `~/.claude/claude_desktop_config.json`; Windows: `%USERPROFILE%\.claude\claude_desktop_config.json`) or the workspace `.claude/settings.json`:
 
 ```json
 {
@@ -356,7 +381,7 @@ The Forge VS Code extension adds an **Agent Tasks** panel to the activity bar an
 #### Installation
 
 ```bash
-# Build and install in one step
+# Build and install in one step (macOS/Linux, or Windows with make installed)
 make install-vscode-ext
 ```
 
@@ -378,6 +403,9 @@ code --install-extension forge-adp-*.vsix
 | `forge.registryUrl` | `http://localhost:19081` | Registry base URL |
 | `forge.apiToken` | _(empty)_ | Bearer token for auth (optional for local dev) |
 | `forge.pollIntervalSeconds` | `15` | How often to auto-refresh the task list |
+| `forge.seederPath` | _(empty)_ | Absolute path to the Forge seeder binary (required for Bootstrap seeding) |
+| `forge.anthropicApiKey` | _(empty)_ | Anthropic API key for the PM Plan chat interview |
+| `forge.plannerModel` | `claude-opus-4-6` | Claude model used for the PM Plan interview |
 
 #### Commands
 
@@ -389,9 +417,22 @@ code --install-extension forge-adp-*.vsix
 | **Forge: Approve Task** | Approve a pending checkpoint (also available inline in the tree) |
 | **Forge: Reject Task** | Reject a pending checkpoint with a reason |
 | **Forge: Refresh Task List** | Manually refresh the task list |
+| **Forge: Bootstrap Project** | Focus the Bootstrap tab to seed and populate plan documents |
+| **Forge: Open Task in Browser** | Open a task's API endpoint in the browser |
 | **Forge: Check Service Health** | Ping the Orchestrator health endpoint |
 
 The status bar item shows a live count of tasks needing attention (awaiting approval or blocked) and pulses while agents are running.
+
+#### Starting a New Project with the PM Plan Chat
+
+The **Plan tab** in the Agent Panel lets a PM agent work through a structured discovery interview with you before any development work begins. This ensures the Architect and developer agents have a complete, accurate product brief to work from.
+
+1. Set `forge.anthropicApiKey` in VS Code settings.
+2. Open the Forge Agent Panel → click the **Plan** tab.
+3. Chat with the PM agent — it asks about your product, target users, core features, and technical constraints.
+4. After ~5–8 exchanges the PM produces a structured product brief. A submit form appears.
+5. Enter your GitHub repo, select a profile, and click **Submit to PM Agent**.
+6. The orchestrator creates a `pm/project-bootstrap` task, which populates `PRODUCT.md` and `CONTRIBUTING.md`, then automatically queues Architect tasks (`requirements-analysis` → `architecture-design` + `api-design`) before any developer work is dispatched.
 
 ---
 
@@ -408,10 +449,20 @@ kubectl get pods -n forge-agents -w
 ### Example Workflow
 
 ```
-Product owner drops a PRD in Slack
-    → PM Agent creates Jira epics and stories
-    → Backend Developer Agent implements the API (opens PR)
+Product owner chats with PM agent in VS Code (Plan tab)
+    → PM Agent populates PRODUCT.md and CONTRIBUTING.md
+    → Architect Agent runs requirements-analysis
+          [output persisted; architecture decisions stored as project-scoped memory]
+    → Architect Agent runs architecture-design
+          [receives requirements-analysis output as dependency context;
+           entities + NFRs stored as project-scoped memory]
+    → Architect Agent runs api-design
+          [receives architecture-design output: entities + arch decisions injected automatically]
+    → PM Agent decomposes goals into sprint-ready Jira tickets
+    → Backend Developer Agent implements the API
+          [reads project-scoped memory: arch decisions, entities, NFRs — opens PR]
     → QA Agent generates test plan and automated tests
+          [reads project-scoped memory: NFRs, entities]
     → SecOps Agent reviews the PR for security issues
     → Human engineer approves the PR
     → DevOps Agent updates deployment manifests
@@ -694,11 +745,140 @@ Webhook security:
 - **k6 Cloud** — Bearer token (`K6_CLOUD_API_TOKEN` → `Authorization`)
 - **Applitools** — Shared secret header (`APPLITOOLS_WEBHOOK_SECRET` → `X-Applitools-Signature`)
 
+### Enabling an Adapter
+
+Every adapter follows the same three-step pattern: set credentials, start the process, register the webhook URL in the external service.
+
+#### Step 1 — Set environment variables
+
+Copy `.env.example` to `.env` and fill in the credentials for the adapter(s) you want to enable. At minimum you need `REDIS_ADDR` pointing at your event bus and the credentials marked as required in the table below. All other variables are optional and enable additional capabilities.
+
+#### Step 2 — Start the adapter
+
+Each adapter is a standalone Go binary. Build and run it directly:
+
+```bash
+# Build all adapters
+make build
+
+# Run a specific adapter (example: Jenkins)
+REDIS_ADDR=localhost:6379 \
+JENKINS_URL=https://jenkins.example.com \
+JENKINS_USER=admin \
+JENKINS_API_TOKEN=your-token \
+./bin/jenkins-adapter
+```
+
+Or add it to your `docker-compose.yml`:
+
+```yaml
+jenkins-adapter:
+  image: forge-adp/jenkins-adapter:latest
+  environment:
+    - REDIS_ADDR=redis:6379
+    - JENKINS_URL=https://jenkins.example.com
+    - JENKINS_USER=admin
+    - JENKINS_API_TOKEN=${JENKINS_API_TOKEN}
+    - JENKINS_WEBHOOK_SECRET=${JENKINS_WEBHOOK_SECRET}
+  ports:
+    - "19111:19111"
+```
+
+#### Step 3 — Register the webhook URL
+
+Point the external service at `https://<your-forge-host>:<port><webhook-path>`. The path is `/webhook` for most adapters; exceptions are noted in the table below.
+
+If your Forge host is not publicly reachable during development, use [ngrok](https://ngrok.com) or [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to expose the port:
+
+```bash
+ngrok http 19091   # exposes the GitHub adapter
+```
+
+#### Adapter setup reference
+
+| Adapter | Port | Required env vars | Webhook path | Where to register |
+|---|---|---|---|---|
+| **Jira** | `:19090` | `JIRA_API_TOKEN`, `JIRA_BASE_URL`, `JIRA_USER_EMAIL` | `/webhook` | Jira → Project Settings → Webhooks |
+| **GitHub** | `:19091` | `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET` | `/webhook` | GitHub → repo/org → Settings → Webhooks |
+| **Slack** | `:19092` | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | `/webhook` | Slack App → Event Subscriptions + Interactivity URLs |
+| **Teams** | `:19093` | `TEAMS_WEBHOOK_URL`, `TEAMS_HMAC_SECRET` | `/webhook` | Azure Bot Service → Messaging endpoint |
+| **Google Chat** | `:19094` | `GOOGLE_CHAT_WEBHOOK_URL`, `GOOGLE_CHAT_VERIFICATION_TOKEN` | `/webhook` | Google Cloud Console → Chat API → Bot configuration |
+| **GitLab** | `:19095` | `GITLAB_TOKEN`, `GITLAB_WEBHOOK_SECRET` | `/webhook` | GitLab → repo/group → Settings → Webhooks |
+| **Confluence** | `:19096` | `CONFLUENCE_BASE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN` | `/webhook` | Confluence → Space Tools → Webhooks |
+| **Linear** | `:19097` | `LINEAR_API_KEY`, `LINEAR_WEBHOOK_SECRET` | `/webhook` | Linear → Settings → API → Webhooks |
+| **PagerDuty** | `:19098` | `PAGERDUTY_API_KEY`, `PAGERDUTY_SERVICE_ID`, `PAGERDUTY_FROM_EMAIL` | `/webhook` | PagerDuty → Integrations → Generic Webhooks V3 |
+| **Opsgenie** | `:19099` | `OPSGENIE_API_KEY` | `/webhook` | Opsgenie → Settings → Integrations → Webhook |
+| **Datadog** | `:19100` | `DATADOG_API_KEY`, `DATADOG_APP_KEY` | `/webhook` | Datadog → Integrations → Webhooks |
+| **Grafana** | `:19101` | `GRAFANA_URL`, `GRAFANA_API_KEY` | `/webhook` | Grafana → Alerting → Contact points → Webhook |
+| **Snyk** | `:19102` | `SNYK_API_TOKEN`, `SNYK_ORG_ID` | `/webhook` | Snyk → Settings → Notifications → Webhook |
+| **SonarQube** | `:19103` | `SONARQUBE_URL`, `SONARQUBE_TOKEN`, `SONARQUBE_WEBHOOK_SECRET` | `/webhook` | SonarQube → Administration → Webhooks |
+| **Terraform Cloud** | `:19104` | `TFC_TOKEN`, `TFC_ORGANIZATION`, `TFC_WEBHOOK_HMAC_KEY` | `/webhook` | TFC → Organization/Workspace → Settings → Notifications |
+| **Atlantis** | `:19105` | `ATLANTIS_URL`, `ATLANTIS_TOKEN`, `ATLANTIS_WEBHOOK_SECRET` | `/webhook` | Atlantis config → `atlantis.yaml` `webhooks:` block |
+| **MongoDB Atlas** | `:19106` | `MONGODB_ATLAS_PUBLIC_KEY`, `MONGODB_ATLAS_PRIVATE_KEY` | `/webhook` | Atlas → Project Settings → Integrations → Webhook |
+| **Databricks** | `:19107` | `DATABRICKS_HOST`, `DATABRICKS_TOKEN` | `/webhook` | Databricks → Jobs → Edit job → Notifications |
+| **Vercel** | `:19108` | `VERCEL_TOKEN`, `VERCEL_WEBHOOK_SECRET` | `/webhook` | Vercel → Team Settings → Webhooks |
+| **Bitbucket** | `:19109` | `BITBUCKET_USERNAME`, `BITBUCKET_APP_PASSWORD`, `BITBUCKET_WEBHOOK_SECRET` | `/webhook` | Bitbucket → repo → Repository settings → Webhooks |
+| **Azure DevOps Repos** | `:19110` | `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_PROJECT`, `AZURE_DEVOPS_PAT` | `/webhook` | Azure DevOps → Project → Service hooks → Web hooks |
+| **Jenkins** | `:19111` | `JENKINS_URL`, `JENKINS_USER`, `JENKINS_API_TOKEN` | `/webhook` | Jenkins → Manage Jenkins → Configure System → Notification plugin, or job → Post-build Actions → Notification |
+| **CircleCI** | `:19112` | `CIRCLECI_TOKEN`, `CIRCLECI_WEBHOOK_SECRET` | `/webhook` | CircleCI → Project Settings → Webhooks |
+| **ArgoCD** | `:19113` | `ARGOCD_URL`, `ARGOCD_TOKEN` | `/webhook` | ArgoCD → Settings → Webhooks (or configure in `argocd-notifications`) |
+| **GitHub Actions / GitLab CI** | `:19114` | `GITHUB_WEBHOOK_SECRET` (GitHub) or `GITLAB_WEBHOOK_SECRET` (GitLab) | `/webhook/github` or `/webhook/gitlab` | Same webhook entry as GitHub/GitLab adapter — share the URL |
+| **Sentry** | `:19115` | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG_SLUG`, `SENTRY_WEBHOOK_SECRET` | `/webhook` | Sentry → Settings → Developer Settings → Internal Integrations → Webhooks |
+| **New Relic** | `:19116` | `NEW_RELIC_API_KEY`, `NEW_RELIC_ACCOUNT_ID` | `/webhook` | New Relic → Alerts → Notification channels → Webhook |
+| **Splunk** | `:19117` | `SPLUNK_HEC_URL`, `SPLUNK_HEC_TOKEN` | `/webhook` | Splunk → Settings → Alert actions → Webhook |
+| **AWS** | `:19118` | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `/webhook` | AWS → SNS → Subscriptions → HTTPS endpoint; CloudWatch → Alarms → Actions → SNS |
+| **Azure Monitor** | `:19119` | `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_PAT` | `/webhook` | Azure Portal → Monitor → Alerts → Action groups → Webhook |
+| **GCP** | `:19120` | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_TOKEN` | `/webhook/pubsub` | GCP → Pub/Sub → Subscriptions → Push endpoint |
+| **HashiCorp Vault** | `:19121` | `VAULT_URL`, `VAULT_TOKEN` | `/webhook/audit` | Vault → `vault audit enable file`; pipe audit log to adapter or configure syslog forwarding |
+| **Wiz** | `:19122` | `WIZ_CLIENT_ID`, `WIZ_CLIENT_SECRET` | `/webhook/wiz` (Wiz) or `/webhook/prisma` (Prisma Cloud) | Wiz → Settings → Automation → Actions → Webhook; Prisma Cloud → Settings → Integrations → Webhook |
+| **Checkov / Trivy** | `:19123` | `BRIDGECREW_API_TOKEN` | `/webhook/checkov` (Checkov) or `/webhook/trivy` (Trivy) | Bridgecrew Platform → Integrations → Webhooks; Trivy — post SARIF output from CI to the webhook endpoint |
+| **Azure DevOps Boards** | `:19124` | `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_PROJECT`, `AZURE_DEVOPS_PAT` | `/webhook` | Azure DevOps → Project → Service hooks → Web hooks (Work item events) |
+| **Shortcut** | `:19125` | `SHORTCUT_API_TOKEN` | `/webhook` | Shortcut → Settings → Integrations → Webhooks |
+| **Notion** | `:19126` | `NOTION_TOKEN` | `/webhook` | Notion does not have native outbound webhooks — use Zapier/Make to forward page events, or poll via the adapter's `/api/v1/pages` endpoint |
+| **LaunchDarkly** | `:19127` | `LAUNCHDARKLY_API_KEY`, `LAUNCHDARKLY_PROJECT_KEY` | `/webhook` | LaunchDarkly → Account Settings → Integrations → Webhooks |
+| **Split.io** | `:19128` | `SPLITIO_ADMIN_TOKEN`, `SPLITIO_WORKSPACE_ID` | `/webhook` | Split.io → Admin API only (no native webhook push; adapter polls or receives CI-triggered events) |
+| **Backstage** | `:19129` | `BACKSTAGE_URL` | `/webhook/scaffolder` | Backstage → `app-config.yaml` → `scaffolder.webhooks` block |
+| **TestRail / Xray** | `:19130` | `TESTRAIL_URL`, `TESTRAIL_USER`, `TESTRAIL_API_KEY` | `/webhook` | TestRail → Administration → Site Settings → Webhooks; Xray → Project Settings → Webhooks |
+| **BrowserStack / Sauce Labs** | `:19131` | `BROWSERSTACK_USER`, `BROWSERSTACK_ACCESS_KEY` | `/webhook` | BrowserStack App Automate → Settings → Webhooks; Sauce Labs — post results from CI to the webhook endpoint |
+| **Zephyr Scale** | `:19132` | `ZEPHYR_API_TOKEN`, `ZEPHYR_PROJECT_KEY` | `/webhook` | Zephyr Scale (Jira app) → Project Settings → Webhooks |
+| **Postman / Newman** | `:19133` | `POSTMAN_API_KEY` | `/webhook` | Postman → Team Settings → Webhooks (Monitor notifications); Newman — invoke `/webhook` endpoint from CI after `newman run` |
+| **Cypress Cloud** | `:19134` | `CYPRESS_RECORD_KEY`, `CYPRESS_PROJECT_ID` | `/webhook` | Cypress Cloud → Project Settings → Notifications → Custom webhooks |
+| **k6 Cloud** | `:19135` | `K6_CLOUD_API_TOKEN` | `/webhook` | k6 Cloud → Project → Notifications → Webhooks |
+| **Applitools** | `:19136` | `APPLITOOLS_API_KEY` | `/webhook` | Applitools → Admin → Hooks → Add webhook |
+| **Flyway** | `:19137` | `FLYWAY_URL`, `FLYWAY_USERNAME`, `FLYWAY_PASSWORD` | _(no inbound webhook — event-driven only)_ | No external registration needed; adapter receives `deployment.requested` events from the bus and calls the Flyway Teams API |
+| **Liquibase** | `:19138` | `LIQUIBASE_URL`, `LIQUIBASE_USERNAME`, `LIQUIBASE_PASSWORD` | _(no inbound webhook — event-driven only)_ | No external registration needed; adapter receives `deployment.requested` events from the bus and calls the Liquibase Hub API |
+
+#### Token scopes and permissions
+
+| Adapter | Minimum required scopes / permissions |
+|---|---|
+| **GitHub** | `repo`, `read:org` (webhooks require `admin:repo_hook`) |
+| **GitLab** | `api`, `read_repository` |
+| **Jira** | `read:jira-work`, `write:jira-work` (Atlassian API token; no OAuth scopes needed) |
+| **Linear** | `read`, `write`, `issues:create` |
+| **Slack** | `chat:write`, `commands`, `channels:read`, `app_mentions:read` |
+| **PagerDuty** | Full Access API key (v2) or scoped with `incidents:read`, `incidents:write` |
+| **Datadog** | API key + Application key with `events_write` scope |
+| **Snyk** | `org:read`, `project:read`, `vuln:read` |
+| **Terraform Cloud** | Team token with `plan` and `apply` permissions on target workspaces |
+| **Backstage** | Static token configured in `app-config.yaml` under `auth.keys` |
+| **LaunchDarkly** | Writer role (to update flag targeting rules) |
+| **Databricks** | `CAN_MANAGE_RUN` permission on target jobs |
+| **MongoDB Atlas** | `Project Read Only` for alerts; `Project Owner` to manage clusters |
+| **HashiCorp Vault** | Policy with `read` on target paths; audit log access |
+| **Wiz** | `SecurityReader` + `IssueManager` roles |
+| **Shortcut** | Full access API token (Shortcut does not offer scoped tokens) |
+| **Notion** | Integration with `Read content`, `Update content`, `Insert content` capabilities on target databases/pages |
+| **Zephyr Scale** | Jira user with `ZFJCLOUD-Administrator` or project-level test management permissions |
+| **k6 Cloud** | `read`, `write` on the target project |
+| **Applitools** | API key from account admin (inherits account-level permissions) |
+
 ### Makefile Commands
 
 ```bash
 make setup              # Install all dependencies (Go, Python, Node.js tools)
 make migrate            # Run database migrations
+make seed-skills        # Register all agent roles and skills with the Registry
 make build              # Build all Go binaries, Python package, MCP server, and VS Code extension
 make build-mcp          # Build only the MCP server (tools/mcp-server/)
 make build-vscode-ext   # Build only the VS Code extension (tools/vscode-extension/)

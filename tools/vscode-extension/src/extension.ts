@@ -1,27 +1,29 @@
 /**
  * Forge ADP — VS Code Extension
  *
- * Activation point. Registers all commands, the task tree view, and the
- * status bar item that shows a count of tasks needing attention.
+ * Activation point. Registers the Agent Panel webview in the secondary
+ * (right) side bar, the status bar badge, and all palette commands.
  */
 
 import * as vscode from "vscode";
 import { OrchestratorClient } from "./orchestratorClient";
 import { ForgeTask } from "./orchestratorClient";
-import { TasksProvider, TaskItem } from "./tasksProvider";
+import { AgentPanelProvider } from "./agentPanelProvider";
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const client = new OrchestratorClient();
-  const tasksProvider = new TasksProvider(client);
+  const panelProvider = new AgentPanelProvider(client, refreshAll);
 
-  // ---- Tree view -----------------------------------------------------------
-  const treeView = vscode.window.createTreeView("forge.tasksView", {
-    treeDataProvider: tasksProvider,
-    showCollapseAll: true,
-  });
-  context.subscriptions.push(treeView);
+  // ---- Agent panel (secondary sidebar) ------------------------------------
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      AgentPanelProvider.viewId,
+      panelProvider,
+      { webviewOptions: { retainContextWhenHidden: true } }
+    )
+  );
 
   // ---- Status bar ----------------------------------------------------------
   const statusBarItem = vscode.window.createStatusBarItem(
@@ -29,7 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
     10
   );
   statusBarItem.command = "forge.listTasks";
-  statusBarItem.tooltip = "Forge ADP — Click to refresh task list";
+  statusBarItem.tooltip = "Forge ADP — Click to focus agent panel";
   context.subscriptions.push(statusBarItem);
 
   function updateStatusBar(tasks: ForgeTask[]): void {
@@ -53,39 +55,41 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarItem.show();
   }
 
-  // ---- Auto-refresh --------------------------------------------------------
+  // ---- Refresh loop --------------------------------------------------------
   async function refreshAll(): Promise<void> {
-    await tasksProvider.load();
-    // After load, pull the tasks back out to update the status bar
+    panelProvider.update([], true, null);
     try {
       const tasks = await client.listTasks();
+      panelProvider.update(tasks, false, null);
       updateStatusBar(tasks);
-    } catch {
-      // ignore status bar update errors
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      panelProvider.update([], false, msg);
+      statusBarItem.text = `$(robot) Forge`;
+      statusBarItem.backgroundColor = undefined;
+      statusBarItem.show();
     }
   }
 
   function startPolling(): void {
     if (pollTimer) clearInterval(pollTimer);
     const intervalMs =
-      (vscode.workspace
+      vscode.workspace
         .getConfiguration("forge")
-        .get<number>("pollIntervalSeconds", 15)) * 1000;
+        .get<number>("pollIntervalSeconds", 15) * 1000;
     pollTimer = setInterval(refreshAll, intervalMs);
   }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("forge.pollIntervalSeconds")) {
-        startPolling();
-      }
+      if (e.affectsConfiguration("forge.pollIntervalSeconds")) startPolling();
     })
   );
 
   startPolling();
   void refreshAll();
 
-  // ---- Agent role quick-pick -----------------------------------------------
+  // ---- Agent role list (shared) -------------------------------------------
   const AGENT_ROLES = [
     "backend-developer",
     "frontend-developer",
@@ -97,9 +101,9 @@ export function activate(context: vscode.ExtensionContext): void {
     "pm",
   ];
 
-  // ---- Commands ------------------------------------------------------------
+  // ---- Commands (command palette / keybinding access) ----------------------
 
-  // forge.submitTask
+  // forge.submitTask — palette fallback; the panel has inline submit
   context.subscriptions.push(
     vscode.commands.registerCommand("forge.submitTask", async () => {
       const role = await vscode.window.showQuickPick(AGENT_ROLES, {
@@ -119,7 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const description = await vscode.window.showInputBox({
         prompt: "Full task description (context, acceptance criteria, links)",
         placeHolder:
-          "Add JWT-based auth to POST /api/v1/auth/login. Accept email+password, return access and refresh tokens…",
+          "Add JWT-based auth to POST /api/v1/auth/login…",
         title: "Submit Forge Task (3/4) — Description",
         validateInput: (v) => (v.trim() ? null : "Description is required"),
       });
@@ -199,21 +203,11 @@ export function activate(context: vscode.ExtensionContext): void {
     )
   );
 
-  // forge.showTaskDetail (triggered by clicking a task item in the tree)
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "forge.showTaskDetail",
-      (task: ForgeTask) => {
-        void vscode.commands.executeCommand("forge.getTask", task);
-      }
-    )
-  );
-
-  // forge.listTasks
+  // forge.listTasks — focuses the agent panel
   context.subscriptions.push(
     vscode.commands.registerCommand("forge.listTasks", async () => {
       await refreshAll();
-      await vscode.commands.executeCommand("forge.tasksView.focus");
+      await vscode.commands.executeCommand(`${AgentPanelProvider.viewId}.focus`);
     })
   );
 
@@ -221,15 +215,14 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "forge.approveTask",
-      async (itemOrId?: TaskItem | string) => {
-        const taskId = resolveTaskId(itemOrId);
-        const id =
-          taskId ??
+      async (id?: string) => {
+        const taskId =
+          id ??
           (await vscode.window.showInputBox({
             prompt: "Enter task ID to approve",
             title: "Approve Task",
           }));
-        if (!id) return;
+        if (!taskId) return;
 
         const comment = await vscode.window.showInputBox({
           prompt: "Optional approval comment",
@@ -237,8 +230,8 @@ export function activate(context: vscode.ExtensionContext): void {
         });
 
         try {
-          await client.approveTask(id.trim(), comment?.trim());
-          vscode.window.showInformationMessage(`Task ${id} approved.`);
+          await client.approveTask(taskId.trim(), comment?.trim());
+          vscode.window.showInformationMessage(`Task ${taskId} approved.`);
           await refreshAll();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -252,15 +245,14 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "forge.rejectTask",
-      async (itemOrId?: TaskItem | string) => {
-        const taskId = resolveTaskId(itemOrId);
-        const id =
-          taskId ??
+      async (id?: string) => {
+        const taskId =
+          id ??
           (await vscode.window.showInputBox({
             prompt: "Enter task ID to reject",
             title: "Reject Task",
           }));
-        if (!id) return;
+        if (!taskId) return;
 
         const reason = await vscode.window.showInputBox({
           prompt: "Reason for rejection (required — fed back to the agent)",
@@ -270,8 +262,8 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!reason) return;
 
         try {
-          await client.rejectTask(id.trim(), reason.trim());
-          vscode.window.showInformationMessage(`Task ${id} rejected.`);
+          await client.rejectTask(taskId.trim(), reason.trim());
+          vscode.window.showInformationMessage(`Task ${taskId} rejected.`);
           await refreshAll();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -292,20 +284,32 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "forge.openTaskInBrowser",
-      async (itemOrId?: TaskItem | string) => {
-        const taskId = resolveTaskId(itemOrId);
-        const id =
-          taskId ??
+      async (id?: string) => {
+        const taskId =
+          id ??
           (await vscode.window.showInputBox({ prompt: "Enter task ID" }));
-        if (!id) return;
+        if (!taskId) return;
         const base = vscode.workspace
           .getConfiguration("forge")
           .get<string>("orchestratorUrl", "http://localhost:19080");
         await vscode.env.openExternal(
-          vscode.Uri.parse(`${base}/v1/tasks/${id}`)
+          vscode.Uri.parse(`${base}/api/v1/tasks/${taskId}`)
         );
       }
     )
+  );
+
+  // forge.bootstrapProject — palette shortcut that opens the Bootstrap tab
+  context.subscriptions.push(
+    vscode.commands.registerCommand("forge.bootstrapProject", async () => {
+      // Focus the panel then let the user interact with the Bootstrap tab
+      await vscode.commands.executeCommand(`${AgentPanelProvider.viewId}.focus`);
+      // The tab switch itself happens in the webview — we can't drive it from
+      // the extension host directly, so just surface the panel.
+      vscode.window.showInformationMessage(
+        "Forge: Click the Bootstrap tab in the Agent Panel to seed and bootstrap a project."
+      );
+    })
   );
 
   // forge.checkHealth
@@ -331,14 +335,8 @@ export function deactivate(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Task detail webview (opened by clicking a card or forge.getTask)
 // ---------------------------------------------------------------------------
-
-function resolveTaskId(item?: TaskItem | string): string | undefined {
-  if (typeof item === "string") return item;
-  if (item instanceof TaskItem) return item.task.id;
-  return undefined;
-}
 
 function renderTaskHtml(task: ForgeTask): string {
   const esc = (s: string) =>

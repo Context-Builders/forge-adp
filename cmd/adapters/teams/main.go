@@ -9,45 +9,61 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+
 	"github.com/dotrage/forge-adp/pkg/events"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 const cardFmt = `{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","size":"Medium","weight":"Bolder","text":"Review Requested"},{"type":"FactSet","facts":[{"title":"Ticket","value":%q},{"title":"Agent","value":%q},{"title":"PR","value":%q}]}],"actions":[{"type":"Action.Execute","title":"Approve","verb":"approve","data":{"action":"approve","task_id":%q}},{"type":"Action.Execute","title":"Request Changes","verb":"reject","data":{"action":"reject","task_id":%q}}]}`
 
 type TeamsAdapter struct {
-	webhookURL    string
-	hmacSecret    string
-	bus           events.Bus
-	httpClient    *http.Client
+	webhookURL      string
+	hmacSecret      string
+	orchestratorURL string
+	bus             events.Bus
+	httpClient      *http.Client
 }
 
 func main() {
+	logger.Init("teams-adapter")
+
 	webhookURL := os.Getenv("TEAMS_WEBHOOK_URL")
 	if webhookURL == "" {
-		log.Fatal("TEAMS_WEBHOOK_URL is required")
+		slog.Error("TEAMS_WEBHOOK_URL is required")
+		os.Exit(1)
 	}
+
 	bus, err := events.NewRedisBus(os.Getenv("REDIS_ADDR"), "forge:events")
 	if err != nil {
-		log.Fatalf("failed to create event bus: %v", err)
+		slog.Error("failed to create event bus", slog.Any("error", err))
+		os.Exit(1)
 	}
+
 	adapter := &TeamsAdapter{
-		webhookURL: webhookURL,
-		hmacSecret: os.Getenv("TEAMS_HMAC_SECRET"),
-		bus:        bus,
-		httpClient: &http.Client{},
+		webhookURL:      webhookURL,
+		hmacSecret:      os.Getenv("TEAMS_HMAC_SECRET"),
+		orchestratorURL: os.Getenv("ORCHESTRATOR_URL"),
+		bus:             bus,
+		httpClient:      &http.Client{},
 	}
+	if adapter.orchestratorURL == "" {
+		adapter.orchestratorURL = "http://localhost:19080"
+	}
+
 	go adapter.subscribeToEvents()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/webhook", adapter.HandleWebhook)
 	mux.HandleFunc("/api/v1/messages", adapter.HandleMessages)
-	log.Printf("Teams adapter listening on :19093")
-	http.ListenAndServe(":19093", mux)
+
+	slog.Info("Teams adapter listening", slog.String("addr", ":19093"))
+	http.ListenAndServe(":19093", logger.HTTPMiddleware("teams-adapter", mux))
 }
 
 func (a *TeamsAdapter) verifySignature(r *http.Request, body []byte) bool {
@@ -69,11 +85,13 @@ func (a *TeamsAdapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	if !a.verifySignature(r, body) {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
@@ -91,33 +109,95 @@ func (a *TeamsAdapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+
 	taskID, _ := data["task_id"].(string)
 	switch action {
 	case "approve":
-		a.bus.Publish(r.Context(), events.Event{Type: events.ReviewApproved, TaskID: taskID})
+		if err := a.callOrchestrator(r.Context(), taskID, "approve"); err != nil {
+			slog.Error("failed to call orchestrator for approve",
+				slog.String("task_id", taskID),
+				slog.Any("error", err))
+		}
 	case "reject":
-		a.bus.Publish(r.Context(), events.Event{Type: events.ReviewRejected, TaskID: taskID})
+		reason, _ := data["reason"].(string)
+		if err := a.callOrchestratorReject(r.Context(), taskID, reason); err != nil {
+			slog.Error("failed to call orchestrator for reject",
+				slog.String("task_id", taskID),
+				slog.Any("error", err))
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
+func (a *TeamsAdapter) callOrchestrator(ctx context.Context, taskID, action string) error {
+	url := fmt.Sprintf("%s/api/v1/tasks/%s/%s", a.orchestratorURL, taskID, action)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("post to orchestrator: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("orchestrator error %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+func (a *TeamsAdapter) callOrchestratorReject(ctx context.Context, taskID, reason string) error {
+	var body io.Reader
+	if reason != "" {
+		b, _ := json.Marshal(map[string]string{"reason": reason})
+		body = bytes.NewReader(b)
+	}
+	url := fmt.Sprintf("%s/api/v1/tasks/%s/reject", a.orchestratorURL, taskID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("post to orchestrator: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("orchestrator error %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 func (a *TeamsAdapter) subscribeToEvents() {
 	ctx := context.Background()
-	a.bus.Subscribe(ctx, []events.EventType{
+	if err := a.bus.Subscribe(ctx, []events.EventType{
 		events.TaskCompleted,
+		events.TaskFailed,
 		events.ReviewRequested,
 		events.EscalationCreated,
+		events.PolicyDenied,
 	}, func(e events.Event) error {
 		switch e.Type {
 		case events.TaskCompleted:
 			return a.notifyTaskCompleted(e)
+		case events.TaskFailed:
+			return a.notifyTaskFailed(e)
 		case events.ReviewRequested:
 			return a.sendApprovalRequest(e)
 		case events.EscalationCreated:
 			return a.sendEscalation(e)
+		case events.PolicyDenied:
+			return a.sendPolicyDenied(e)
 		}
 		return nil
-	})
+	}); err != nil {
+		slog.Error("failed to subscribe to events", slog.Any("error", err))
+	}
 }
 
 func (a *TeamsAdapter) notifyTaskCompleted(e events.Event) error {
@@ -132,6 +212,29 @@ func (a *TeamsAdapter) notifyTaskCompleted(e events.Event) error {
 			{
 				"contentType": "application/vnd.microsoft.card.adaptive",
 				"content":     fmt.Sprintf(`{"type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"Task completed: %s\nPR: %s"}]}`, payload.JiraKey, payload.PRUrl),
+			},
+		},
+	}
+	return a.postToTeams(msg)
+}
+
+func (a *TeamsAdapter) notifyTaskFailed(e events.Event) error {
+	var payload struct {
+		TaskID  string `json:"task_id"`
+		JiraKey string `json:"jira_key"`
+		Reason  string `json:"reason"`
+	}
+	json.Unmarshal(e.Payload, &payload)
+	text := fmt.Sprintf("Task %s failed", payload.TaskID)
+	if payload.JiraKey != "" {
+		text = fmt.Sprintf("%s failed: %s", payload.JiraKey, payload.Reason)
+	}
+	msg := map[string]interface{}{
+		"type": "message",
+		"attachments": []map[string]interface{}{
+			{
+				"contentType": "application/vnd.microsoft.card.adaptive",
+				"content":     fmt.Sprintf(`{"type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":%q}]}`, text),
 			},
 		},
 	}
@@ -172,6 +275,25 @@ func (a *TeamsAdapter) sendEscalation(e events.Event) error {
 			{
 				"contentType": "application/vnd.microsoft.card.adaptive",
 				"content":     fmt.Sprintf(`{"type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"ESCALATION\nTask: %s\nTicket: %s\nReason: %s"}]}`, payload.TaskID, payload.JiraKey, payload.Reason),
+			},
+		},
+	}
+	return a.postToTeams(msg)
+}
+
+func (a *TeamsAdapter) sendPolicyDenied(e events.Event) error {
+	var payload struct {
+		TaskID string `json:"task_id"`
+		Policy string `json:"policy"`
+		Reason string `json:"reason"`
+	}
+	json.Unmarshal(e.Payload, &payload)
+	msg := map[string]interface{}{
+		"type": "message",
+		"attachments": []map[string]interface{}{
+			{
+				"contentType": "application/vnd.microsoft.card.adaptive",
+				"content":     fmt.Sprintf(`{"type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"POLICY DENIED\nTask: %s\nPolicy: %s\nReason: %s"}]}`, payload.TaskID, payload.Policy, payload.Reason),
 			},
 		},
 	}

@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/dotrage/forge-adp/pkg/events"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 // GoogleChatAdapter handles bidirectional communication with Google Chat via
@@ -19,7 +20,9 @@ import (
 type GoogleChatAdapter struct {
 	webhookURL        string
 	verificationToken string
+	orchestratorURL   string
 	bus               events.Bus
+	httpClient        *http.Client
 }
 
 type ChatEvent struct {
@@ -110,20 +113,29 @@ type CardAction struct {
 }
 
 func main() {
+	logger.Init("googlechat-adapter")
+
 	webhookURL := os.Getenv("GOOGLE_CHAT_WEBHOOK_URL")
 	if webhookURL == "" {
-		log.Fatal("GOOGLE_CHAT_WEBHOOK_URL is required")
+		slog.Error("GOOGLE_CHAT_WEBHOOK_URL is required")
+		os.Exit(1)
 	}
 
 	bus, err := events.NewRedisBus(os.Getenv("REDIS_ADDR"), "forge:events")
 	if err != nil {
-		log.Fatalf("failed to create event bus: %v", err)
+		slog.Error("failed to create event bus", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	adapter := &GoogleChatAdapter{
 		webhookURL:        webhookURL,
 		verificationToken: os.Getenv("GOOGLE_CHAT_VERIFICATION_TOKEN"),
+		orchestratorURL:   os.Getenv("ORCHESTRATOR_URL"),
 		bus:               bus,
+		httpClient:        &http.Client{},
+	}
+	if adapter.orchestratorURL == "" {
+		adapter.orchestratorURL = "http://localhost:19080"
 	}
 
 	go adapter.subscribeToEvents()
@@ -134,8 +146,8 @@ func main() {
 	})
 	mux.HandleFunc("/googlechat/events", adapter.HandleEvent)
 
-	log.Printf("Google Chat adapter listening on :19094")
-	http.ListenAndServe(":19094", mux)
+	slog.Info("Google Chat adapter listening", slog.String("addr", ":19094"))
+	http.ListenAndServe(":19094", logger.HTTPMiddleware("googlechat-adapter", mux))
 }
 
 func (a *GoogleChatAdapter) HandleEvent(w http.ResponseWriter, r *http.Request) {
@@ -189,11 +201,19 @@ func (a *GoogleChatAdapter) handleCardClicked(ctx context.Context, w http.Respon
 		}
 	}
 
+	var orchestratorErr error
 	switch event.Action.ActionMethodName {
 	case "approve":
-		a.bus.Publish(ctx, events.Event{Type: events.ReviewApproved, TaskID: taskID})
+		orchestratorErr = a.callOrchestrator(ctx, taskID, "approve")
 	case "reject":
-		a.bus.Publish(ctx, events.Event{Type: events.ReviewRejected, TaskID: taskID})
+		orchestratorErr = a.callOrchestrator(ctx, taskID, "reject")
+	}
+
+	if orchestratorErr != nil {
+		slog.Error("failed to call orchestrator",
+			slog.String("action", event.Action.ActionMethodName),
+			slog.String("task_id", taskID),
+			slog.Any("error", orchestratorErr))
 	}
 
 	resp := ChatOutboundMessage{
@@ -203,9 +223,27 @@ func (a *GoogleChatAdapter) handleCardClicked(ctx context.Context, w http.Respon
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (a *GoogleChatAdapter) callOrchestrator(ctx context.Context, taskID, action string) error {
+	url := fmt.Sprintf("%s/api/v1/tasks/%s/%s", a.orchestratorURL, taskID, action)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("post to orchestrator: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("orchestrator error %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 func (a *GoogleChatAdapter) subscribeToEvents() {
 	ctx := context.Background()
-	a.bus.Subscribe(ctx, []events.EventType{
+	if err := a.bus.Subscribe(ctx, []events.EventType{
 		events.TaskCompleted,
 		events.ReviewRequested,
 		events.EscalationCreated,
@@ -219,7 +257,9 @@ func (a *GoogleChatAdapter) subscribeToEvents() {
 			return a.sendEscalation(e)
 		}
 		return nil
-	})
+	}); err != nil {
+		slog.Error("failed to subscribe to events", slog.Any("error", err))
+	}
 }
 
 func (a *GoogleChatAdapter) notifyTaskCompleted(e events.Event) error {
@@ -298,7 +338,10 @@ func (a *GoogleChatAdapter) sendEscalation(e events.Event) error {
 	msg := ChatOutboundMessage{
 		Cards: []ChatCard{
 			{
-				Header: &ChatCardHeader{Title: "ESCALATION", Subtitle: "Task: " + payload.TaskID + " | " + payload.JiraKey},
+				Header: &ChatCardHeader{
+					Title:    "ESCALATION",
+					Subtitle: "Task: " + payload.TaskID + " | " + payload.JiraKey,
+				},
 				Sections: []ChatSection{
 					{Widgets: []ChatWidget{
 						{TextParagraph: &TextParagraph{Text: payload.Reason}},
@@ -315,7 +358,7 @@ func (a *GoogleChatAdapter) postWebhook(msg ChatOutboundMessage) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(a.webhookURL, "application/json", bytes.NewReader(data))
+	resp, err := a.httpClient.Post(a.webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}

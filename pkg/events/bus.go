@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -120,8 +121,7 @@ func (b *RedisBus) Subscribe(ctx context.Context, types []EventType, handler fun
 
 				if len(typeSet) == 0 || typeSet[event.Type] {
 					if err := handler(event); err != nil {
-						// Log error but continue processing
-						fmt.Printf("handler error: %v\n", err)
+						slog.Error("event handler error", slog.String("event_type", string(event.Type)), slog.String("task_id", event.TaskID), slog.Any("error", err))
 					}
 				}
 			}

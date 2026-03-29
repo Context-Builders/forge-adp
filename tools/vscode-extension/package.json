@@ -2,12 +2,13 @@
   "name": "forge-adp",
   "displayName": "Forge ADP",
   "description": "Submit tasks to Forge agents, track progress, and approve checkpoints directly from VS Code.",
-  "version": "0.1.0",
+  "icon": "images/forge-adp.png",
+  "version": "0.1.2",
   "license": "Apache-2.0",
-  "publisher": "dotrage",
+  "publisher": "context-builders",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dotrage/forge-adp"
+    "url": "https://github.com/Context-Builders/forge-adp"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -41,6 +42,21 @@
           "default": 15,
           "minimum": 5,
           "description": "How often (in seconds) to refresh the task list in the sidebar."
+        },
+        "forge.seederPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Forge seeder binary. Required to use the 'Seed project first' option in the Bootstrap tab (e.g. /Users/me/forge-adp/seeder)."
+        },
+        "forge.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key used by the PM Plan chat to conduct project discovery interviews. Get one at https://console.anthropic.com."
+        },
+        "forge.plannerModel": {
+          "type": "string",
+          "default": "claude-opus-4-6",
+          "description": "Claude model used for the PM Plan chat interview (e.g. claude-opus-4-6, claude-sonnet-4-6)."
         }
       }
     },
@@ -82,54 +98,42 @@
       {
         "command": "forge.checkHealth",
         "title": "Forge: Check Service Health"
+      },
+      {
+        "command": "forge.bootstrapProject",
+        "title": "Forge: Bootstrap Project",
+        "icon": "$(rocket)"
       }
     ],
     "viewsContainers": {
-      "activitybar": [
+      "secondarySidebar": [
         {
           "id": "forge-adp",
           "title": "Forge ADP",
-          "icon": "$(robot)"
+          "icon": "images/forge-adp.svg"
         }
       ]
     },
     "views": {
       "forge-adp": [
         {
-          "id": "forge.tasksView",
-          "name": "Agent Tasks",
-          "icon": "$(tasklist)"
+          "type": "webview",
+          "id": "forge.agentPanel",
+          "name": "Agent Panel"
         }
       ]
     },
     "menus": {
       "view/title": [
         {
-          "command": "forge.submitTask",
-          "when": "view == forge.tasksView",
+          "command": "forge.refreshTasks",
+          "when": "view == forge.agentPanel",
           "group": "navigation@1"
         },
         {
-          "command": "forge.refreshTasks",
-          "when": "view == forge.tasksView",
-          "group": "navigation@2"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "forge.approveTask",
-          "when": "view == forge.tasksView && viewItem == awaiting_approval",
-          "group": "inline@1"
-        },
-        {
-          "command": "forge.rejectTask",
-          "when": "view == forge.tasksView && viewItem == awaiting_approval",
-          "group": "inline@2"
-        },
-        {
-          "command": "forge.openTaskInBrowser",
-          "when": "view == forge.tasksView",
-          "group": "inline@3"
+          "command": "forge.checkHealth",
+          "when": "view == forge.agentPanel",
+          "group": "overflow@1"
         }
       ]
     }

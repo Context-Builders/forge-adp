@@ -9,12 +9,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/dotrage/forge-adp/pkg/events"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
+
+const linearAPIURL = "https://api.linear.app/graphql"
 
 // LinearAdapter handles bidirectional communication with Linear via
 // the Linear GraphQL API (outbound) and webhook events (inbound).
@@ -24,8 +27,6 @@ type LinearAdapter struct {
 	bus           events.Bus
 	http          *http.Client
 }
-
-const linearAPIURL = "https://api.linear.app/graphql"
 
 // WebhookPayload is the structure Linear sends for issue events.
 type WebhookPayload struct {
@@ -46,14 +47,18 @@ type IssueInput struct {
 }
 
 func main() {
+	logger.Init("linear-adapter")
+
 	apiKey := os.Getenv("LINEAR_API_KEY")
 	if apiKey == "" {
-		log.Fatal("LINEAR_API_KEY is required")
+		slog.Error("LINEAR_API_KEY is required")
+		os.Exit(1)
 	}
 
 	bus, err := events.NewRedisBus(os.Getenv("REDIS_ADDR"), "forge:events")
 	if err != nil {
-		log.Fatalf("failed to create event bus: %v", err)
+		slog.Error("failed to create event bus", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	adapter := &LinearAdapter{
@@ -73,8 +78,8 @@ func main() {
 	mux.HandleFunc("/api/v1/issues", adapter.HandleIssues)
 	mux.HandleFunc("/api/v1/transitions", adapter.HandleTransitions)
 
-	log.Printf("Linear adapter listening on :19097")
-	http.ListenAndServe(":19097", mux)
+	slog.Info("Linear adapter listening", slog.String("addr", ":19097"))
+	http.ListenAndServe(":19097", logger.HTTPMiddleware("linear-adapter", mux))
 }
 
 func (a *LinearAdapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -167,13 +172,15 @@ func (a *LinearAdapter) handleIssueEvent(ctx context.Context, evt WebhookPayload
 	}
 }
 
-func (a *LinearAdapter) handleCommentEvent(ctx context.Context, evt WebhookPayload) {
-	// Handle comment events - e.g., blocking comments trigger escalations.
+func (a *LinearAdapter) handleCommentEvent(_ context.Context, _ WebhookPayload) {
+	// Handle comment events — blocking comments may trigger escalations.
 }
 
+// subscribeToEvents listens for TaskBlocked and EscalationCreated events and
+// updates the corresponding Linear issue state or adds a comment.
 func (a *LinearAdapter) subscribeToEvents() {
 	ctx := context.Background()
-	a.bus.Subscribe(ctx, []events.EventType{
+	if err := a.bus.Subscribe(ctx, []events.EventType{
 		events.TaskBlocked,
 		events.EscalationCreated,
 	}, func(e events.Event) error {
@@ -184,7 +191,9 @@ func (a *LinearAdapter) subscribeToEvents() {
 			return a.addComment(ctx, e)
 		}
 		return nil
-	})
+	}); err != nil {
+		slog.Error("failed to subscribe to events", slog.Any("error", err))
+	}
 }
 
 func (a *LinearAdapter) updateIssueState(ctx context.Context, e events.Event) error {
@@ -194,6 +203,9 @@ func (a *LinearAdapter) updateIssueState(ctx context.Context, e events.Event) er
 	}
 	if err := json.Unmarshal(e.Payload, &payload); err != nil {
 		return err
+	}
+	if payload.LinearID == "" || payload.StateID == "" {
+		return nil
 	}
 
 	mutation := `
@@ -216,6 +228,9 @@ func (a *LinearAdapter) addComment(ctx context.Context, e events.Event) error {
 	if err := json.Unmarshal(e.Payload, &payload); err != nil {
 		return err
 	}
+	if payload.LinearID == "" {
+		return nil
+	}
 
 	mutation := `
 		mutation CommentCreate($issueId: String!, $body: String!) {
@@ -229,6 +244,10 @@ func (a *LinearAdapter) addComment(ctx context.Context, e events.Event) error {
 	}, nil)
 }
 
+// HandleIssues fetches or creates Linear issues via the GraphQL API.
+//
+//	GET  /api/v1/issues?id=<id>
+//	POST /api/v1/issues
 func (a *LinearAdapter) HandleIssues(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -280,6 +299,9 @@ func (a *LinearAdapter) HandleIssues(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleTransitions updates a Linear issue's workflow state.
+//
+//	POST /api/v1/transitions  {"issue_id":"...","state_id":"..."}
 func (a *LinearAdapter) HandleTransitions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -36,15 +36,21 @@ CREATE TABLE tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     jira_ticket_id VARCHAR(50),
     agent_id UUID REFERENCES agents(id),
+    agent_role VARCHAR(50),
     skill_name VARCHAR(100),
-    status VARCHAR(30) DEFAULT 'created',
+    title VARCHAR(500),
+    description TEXT,
+    status VARCHAR(30) DEFAULT 'pending',
     priority INTEGER DEFAULT 0,
     input_payload JSONB,
     output_payload JSONB,
     error_message TEXT,
+    repo VARCHAR(500),
+    platform_repos JSONB DEFAULT '[]',
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_tasks_status ON tasks(status);
