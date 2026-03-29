@@ -1,6 +1,11 @@
-.PHONY: setup build build-mcp build-vscode-ext install-vscode-ext test migrate run-local clean \
+.PHONY: setup build build-mcp build-vscode-ext install-vscode-ext test migrate seed-skills run-local run-agents clean \
         deploy-aws deploy-gcp deploy-azure destroy-aws destroy-gcp destroy-azure \
         helm-deploy-aws helm-deploy-gcp helm-deploy-azure
+
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
 
 # Cloud deployment targets
 # Required variables: COMPANY_ID, ENVIRONMENT (default: dev)
@@ -86,9 +91,26 @@ install-vscode-ext: build-vscode-ext
 		npx --yes @vscode/vsce package --no-dependencies && \
 		code --install-extension forge-adp-*.vsix
 
+seed-skills:
+	@echo "Seeding skills into registry..."
+	cd pkg/agents && poetry run python3 ../../tools/seed-skills/main.py
+
+run-agents:
+	@echo "Starting agent dispatchers..."
+	cd pkg/agents && AGENT_ROLE=architect      poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=pm             poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=backend-developer poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=frontend-developer poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=dba            poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=devops         poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=qa             poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=sre            poetry run python3 -m forge_agents.dispatcher &
+	cd pkg/agents && AGENT_ROLE=governance     poetry run python3 -m forge_agents.dispatcher &
+
 migrate:
 	@echo "Running DB migrations..."
 	psql "$$DATABASE_URL" -f internal/db/migrations/000001_init_schema.up.sql
+	psql "$$DATABASE_URL" -f internal/db/migrations/000002_add_memory_scope.up.sql
 
 run-local:
 	docker-compose -f docker-compose.dev.yml up -d
@@ -104,7 +126,7 @@ run-local:
 
 test:
 	go test ./...
-	cd pkg/agents && poetry run pytest tests/ -v
+	cd pkg/agents && poetry run pytest forge_agents/tests/ -v
 
 test-integration:
 	cd pkg/agents && poetry run pytest tests/integration/ -v

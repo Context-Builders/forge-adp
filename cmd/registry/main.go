@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,9 +10,12 @@ import (
 
 	"github.com/dotrage/forge-adp/internal/registry"
 	"github.com/dotrage/forge-adp/pkg/config"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 func main() {
+	logger.Init("registry")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -22,7 +25,8 @@ func main() {
 		S3Region:    os.Getenv("AWS_REGION"),
 	})
 	if err != nil {
-		log.Fatalf("failed to create registry: %v", err)
+		slog.Error("failed to create registry", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -31,16 +35,17 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/agents", reg.HandleAgents)
 	mux.HandleFunc("/api/v1/skills", reg.HandleSkills)
+	mux.HandleFunc("/api/v1/skills/{role}/{name}", reg.HandleGetSkill)
 	mux.HandleFunc("/api/v1/llm-providers", reg.HandleLLMProviders)
 
 	addr := config.RegistryPort()
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: logger.HTTPMiddleware("registry", mux),
 	}
 
 	go func() {
-		log.Printf("registry listening on %s", addr)
+		slog.Info("registry listening", slog.String("addr", addr))
 		server.ListenAndServe()
 	}()
 
@@ -48,6 +53,6 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	log.Println("shutting down registry...")
+	slog.Info("shutting down registry")
 	server.Shutdown(ctx)
 }

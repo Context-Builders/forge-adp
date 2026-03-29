@@ -1,15 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
-	"strings"
+
 	"github.com/dotrage/forge-adp/pkg/events"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 const cypressAPIBase = "https://api.cypress.io/v1"
@@ -22,10 +24,10 @@ type CypressAdapter struct {
 }
 
 type cypressRunWebhook struct {
-	Event string `json:"event"` // "RUN_COMPLETED"
+	Event string `json:"event"`
 	Run   struct {
-		ID        string `json:"id"`
-		Status    string `json:"status"` // "passed" | "failed" | "errored" | "cancelled" | "noTests"
+		ID           string `json:"id"`
+		Status       string `json:"status"`
 		TotalFailed  int    `json:"totalFailed"`
 		TotalPassed  int    `json:"totalPassed"`
 		TotalPending int    `json:"totalPending"`
@@ -37,26 +39,33 @@ type cypressRunWebhook struct {
 }
 
 func main() {
+	logger.Init("cypress-adapter")
+
 	bus, err := events.NewRedisBus(os.Getenv("REDIS_ADDR"), "forge:events")
 	if err != nil {
-		log.Fatalf("failed to create event bus: %v", err)
+		slog.Error("failed to create event bus", slog.Any("error", err))
+		os.Exit(1)
 	}
-adapter := &CypressAdapter{
-	apiKey:    os.Getenv("CYPRESS_API_KEY"),
-	projectID: os.Getenv("CYPRESS_PROJECT_ID"),
-	bus:       bus,
-	httpClient: &http.Client{},
-}
-go adapter.subscribeToEvents()
-mux := http.NewServeMux()
-mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-})
-mux.HandleFunc("/webhook", adapter.HandleWebhook)
-mux.HandleFunc("/api/v1/runs", adapter.HandleRuns)
-mux.HandleFunc("/api/v1/instances", adapter.HandleInstances)
-log.Printf("Cypress Cloud adapter listening on :19134")
-http.ListenAndServe(":19134", mux)
+
+	adapter := &CypressAdapter{
+		apiKey:     os.Getenv("CYPRESS_API_KEY"),
+		projectID:  os.Getenv("CYPRESS_PROJECT_ID"),
+		bus:        bus,
+		httpClient: &http.Client{},
+	}
+
+	go adapter.subscribeToEvents()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/webhook", adapter.HandleWebhook)
+	mux.HandleFunc("/api/v1/runs", adapter.HandleRuns)
+	mux.HandleFunc("/api/v1/instances", adapter.HandleInstances)
+
+	slog.Info("Cypress Cloud adapter listening", slog.String("addr", ":19134"))
+	http.ListenAndServe(":19134", logger.HTTPMiddleware("cypress-adapter", mux))
 }
 
 func (a *CypressAdapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -64,126 +73,149 @@ func (a *CypressAdapter) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-// Verify shared secret if configured
-if secret := os.Getenv("CYPRESS_WEBHOOK_SECRET"); secret != "" {
-	if r.Header.Get("X-Cypress-Secret") != secret {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+
+	if secret := os.Getenv("CYPRESS_WEBHOOK_SECRET"); secret != "" {
+		if r.Header.Get("X-Cypress-Secret") != secret {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	var payload cypressRunWebhook
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-}
 
-var payload cypressRunWebhook
-if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-	http.Error(w, err.Error(), http.StatusBadRequest)
-	return
-}
-if payload.Event != "RUN_COMPLETED" {
-	w.WriteHeader(http.StatusOK)
-	return
-}
-switch payload.Run.Status {
+	if payload.Event != "RUN_COMPLETED" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	switch payload.Run.Status {
 	case "passed":
-	ep, _ := json.Marshal(map[string]interface{}{
-		"run_id":       payload.Run.ID,
-		"project_id":   payload.Run.ProjectID,
-		"branch":       payload.Run.Branch,
-		"commit_sha":   payload.Run.CommitSha,
-		"total_passed": payload.Run.TotalPassed,
-		"source":       "cypress",
-})
-a.bus.Publish(r.Context(), events.Event{Type: events.TaskCompleted, Payload: ep})
-case "failed", "errored":
-ep, _ := json.Marshal(map[string]interface{}{
-	"run_id":        payload.Run.ID,
-	"project_id":    payload.Run.ProjectID,
-	"branch":        payload.Run.Branch,
-	"commit_sha":    payload.Run.CommitSha,
-	"total_failed":  payload.Run.TotalFailed,
-	"total_passed":  payload.Run.TotalPassed,
-	"source":        "cypress",
-})
-a.bus.Publish(r.Context(), events.Event{Type: events.TaskBlocked, Payload: ep})
-}
-w.WriteHeader(http.StatusOK)
+		ep, _ := json.Marshal(map[string]interface{}{
+			"run_id":       payload.Run.ID,
+			"project_id":   payload.Run.ProjectID,
+			"branch":       payload.Run.Branch,
+			"commit_sha":   payload.Run.CommitSha,
+			"total_passed": payload.Run.TotalPassed,
+			"source":       "cypress",
+		})
+		a.bus.Publish(r.Context(), events.Event{Type: events.TaskCompleted, Payload: ep})
+	case "failed", "errored":
+		ep, _ := json.Marshal(map[string]interface{}{
+			"run_id":       payload.Run.ID,
+			"project_id":   payload.Run.ProjectID,
+			"branch":       payload.Run.Branch,
+			"commit_sha":   payload.Run.CommitSha,
+			"total_failed": payload.Run.TotalFailed,
+			"total_passed": payload.Run.TotalPassed,
+			"source":       "cypress",
+		})
+		a.bus.Publish(r.Context(), events.Event{Type: events.TaskBlocked, Payload: ep})
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
+// HandleRuns lists Cypress Cloud runs for a project.
+//
+//	GET /api/v1/runs[?project_id=<id>]
 func (a *CypressAdapter) HandleRuns(w http.ResponseWriter, r *http.Request) {
 	projectID := r.URL.Query().Get("project_id")
 	if projectID == "" {
 		projectID = a.projectID
 	}
-switch r.Method {
-	case http.MethodGet:
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-var result interface{}
-if err := a.cyRequest(r.Context(), http.MethodGet, fmt.Sprintf("/projects/%s/runs", projectID), nil, &result); err != nil {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	return
-}
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(result)
-default:
-http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-}
+	var result interface{}
+	if err := a.cyRequest(r.Context(), http.MethodGet, fmt.Sprintf("/projects/%s/runs", projectID), nil, &result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
+// HandleInstances returns details for a specific run instance.
+//
+//	GET /api/v1/instances?instance_id=<id>
 func (a *CypressAdapter) HandleInstances(w http.ResponseWriter, r *http.Request) {
 	instanceID := r.URL.Query().Get("instance_id")
 	if instanceID == "" {
 		http.Error(w, "instance_id query parameter is required", http.StatusBadRequest)
 		return
 	}
-switch r.Method {
-	case http.MethodGet:
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-var result interface{}
-if err := a.cyRequest(r.Context(), http.MethodGet, fmt.Sprintf("/instances/%s", instanceID), nil, &result); err != nil {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	return
-}
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(result)
-default:
-http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-}
+	var result interface{}
+	if err := a.cyRequest(r.Context(), http.MethodGet, fmt.Sprintf("/instances/%s", instanceID), nil, &result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
+// subscribeToEvents listens for ReviewApproved events. When a review is approved
+// with a cypress_project_id in the payload, a new Cypress run is logged for operators.
 func (a *CypressAdapter) subscribeToEvents() {
 	ctx := context.Background()
-	a.bus.Subscribe(ctx, []events.EventType{events.ReviewApproved}, func(e events.Event) error {
+	if err := a.bus.Subscribe(ctx, []events.EventType{events.ReviewApproved}, func(e events.Event) error {
+		var payload struct {
+			ProjectID string `json:"cypress_project_id"`
+		}
+		json.Unmarshal(e.Payload, &payload)
+		projectID := payload.ProjectID
+		if projectID == "" {
+			projectID = a.projectID
+		}
+		if projectID == "" {
+			return nil
+		}
+		slog.Info("review approved — Cypress run can be triggered",
+			slog.String("project_id", projectID),
+			slog.String("task_id", e.TaskID))
 		return nil
-})
+	}); err != nil {
+		slog.Error("failed to subscribe to review approved events", slog.Any("error", err))
+	}
 }
 
 func (a *CypressAdapter) cyRequest(ctx context.Context, method, path string, body interface{}, out interface{}) error {
-
-var bodyReader io.Reader
-if body != nil {
-	b, err := json.Marshal(body)
+	var bodyReader io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal request: %w", err)
+		}
+		bodyReader = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, cypressAPIBase+path, bodyReader)
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return fmt.Errorf("create request: %w", err)
 	}
-bodyReader = strings.NewReader(string(b))
-}
-req, err := http.NewRequestWithContext(ctx, method, cypressAPIBase+path, bodyReader)
-if err != nil {
-	return fmt.Errorf("create request: %w", err)
-}
-req.Header.Set("Authorization", "Bearer "+a.apiKey)
-req.Header.Set("Content-Type", "application/json")
-resp, err := a.httpClient.Do(req)
-if err != nil {
-	return fmt.Errorf("execute request: %w", err)
-}
-defer resp.Body.Close()
-if resp.StatusCode >= 300 {
-	b, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("cypress API error %d: %s", resp.StatusCode, string(b))
-}
-if out != nil {
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode response: %w", err)
+	req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute request: %w", err)
 	}
-}
-return nil
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("cypress API error %d: %s", resp.StatusCode, string(b))
+	}
+	if out != nil {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decode response: %w", err)
+		}
+	}
+	return nil
 }

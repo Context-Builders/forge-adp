@@ -5,25 +5,37 @@ import os
 import sys
 import json
 import logging
-from typing import Type
+from typing import Optional, Type
 
+import httpx
+
+from .logging_config import configure_logging
 from .runtime import (
     BaseAgent, AgentIdentity, Task, TaskStatus,
     LLMProvider, PlanReader, MemoryStore
 )
 from .architect import ArchitectAgent
 from .backend_developer import BackendDeveloperAgent
+from .dba import DBAAgent
+from .devops import DevOpsAgent
+from .frontend_developer import FrontendDeveloperAgent
 from .governance import GovernanceAgent
 from .pm import PMAgent
+from .qa import QAAgent
+from .sre import SREAgent
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 AGENT_CLASSES: dict[str, Type[BaseAgent]] = {
     "architect": ArchitectAgent,
     "backend-developer": BackendDeveloperAgent,
+    "dba": DBAAgent,
+    "devops": DevOpsAgent,
+    "frontend-developer": FrontendDeveloperAgent,
     "governance": GovernanceAgent,
     "pm": PMAgent,
+    "qa": QAAgent,
+    "sre": SREAgent,
 }
 
 
@@ -62,8 +74,33 @@ def create_agent(role: str) -> BaseAgent:
     )
 
 
+def _register_agent(role: str, instance_id: str) -> Optional[str]:
+    """Register this agent instance with the registry.
+
+    Returns the agent UUID on success, or None if the registry is unavailable.
+    Non-fatal — callers should handle a None return gracefully.
+    """
+    registry_url = os.environ.get("REGISTRY_URL", "http://localhost:19081")
+    try:
+        resp = httpx.post(
+            f"{registry_url}/api/v1/agents",
+            json={"id": instance_id, "role": role, "status": "idle", "skills": []},
+            timeout=5.0,
+        )
+        if resp.status_code in (200, 201):
+            agent_uuid = resp.json().get("id")
+            logger.info("Registered agent role=%s instance=%s uuid=%s", role, instance_id, agent_uuid)
+            return agent_uuid
+        else:
+            logger.warning("Agent registration returned %s", resp.status_code)
+    except Exception as exc:
+        logger.warning("Could not reach registry for agent registration: %s", exc)
+    return None
+
+
 def main():
     """Main entry point for the agent runner."""
+    configure_logging("runner")
     role = os.environ.get("AGENT_ROLE")
     task_json = os.environ.get("TASK_PAYLOAD")
     repo = os.environ.get("REPO")
@@ -72,12 +109,15 @@ def main():
         logger.error("Missing required environment variables: AGENT_ROLE, TASK_PAYLOAD, REPO")
         sys.exit(1)
 
+    instance_id = os.environ.get("FORGE_INSTANCE_ID", "default")
+    _register_agent(role, instance_id)
+
     task_data = json.loads(task_json)
     task = Task(
         id=task_data["id"],
-        jira_ticket_id=task_data["jira_ticket_id"],
+        jira_ticket_id=task_data.get("jira_ticket_id", ""),
         skill_name=task_data["skill_name"],
-        input_payload=task_data["input"],
+        input_payload=task_data.get("input") or {},
         status=TaskStatus.QUEUED
     )
 

@@ -1,0 +1,92 @@
+# {{.ProjectName}} — Database Conventions
+
+*Org-level rules for schema design. DBA and Architect agents must follow these conventions on every task. Do not deviate without an explicit ADR.*
+
+## Primary Keys
+{{- if .HasProfile}}
+**{{.Profile.DB.PrimaryKey}}**
+
+All tables use this key type. Never use auto-increment integers as primary keys.
+{{- else}}
+<!-- Define your primary key strategy (e.g. UUID v7, BIGSERIAL, ULID) -->
+{{- end}}
+
+## Naming Conventions
+{{- if .HasProfile}}
+**{{.Profile.DB.Naming}}**
+
+Examples:
+- Table: `user_accounts` (plural, snake_case)
+- Column: `created_at`, `first_name` (snake_case)
+- Join table: `user_roles` (alphabetical order of entities)
+{{- else}}
+<!-- Define table and column naming conventions -->
+{{- end}}
+
+## Required Audit Columns
+
+{{- if .HasProfile}}
+Every table must include these columns:
+{{range .Profile.DB.AuditColumns}}
+- `{{.}}`
+{{- end}}
+
+No exceptions. Agents must include these in every `CREATE TABLE` migration.
+{{- else}}
+<!-- Define required audit columns for every table -->
+{{- end}}
+
+## Soft Deletes
+{{- if .HasProfile}}
+{{- if .Profile.DB.SoftDeletes}}
+**Soft deletes are required.** Use `deleted_at TIMESTAMPTZ NULL`.
+
+- Never issue `DELETE` in application code
+- All queries must filter `WHERE deleted_at IS NULL` unless explicitly fetching deleted records
+- Unique constraints must account for soft deletes (partial indexes: `WHERE deleted_at IS NULL`)
+{{- else}}
+**Hard deletes are used.** Document any exceptions explicitly in the migration.
+{{- end}}
+{{- else}}
+<!-- Soft delete strategy: deleted_at column or hard deletes? -->
+{{- end}}
+
+## Index Naming
+{{- if .HasProfile}}
+Pattern: `{{.Profile.DB.IndexNaming}}`
+
+Examples:
+- `idx_users_email`
+- `idx_orders_user_id_created_at`
+- `idx_payments_deleted_at` (partial index for soft deletes)
+{{- else}}
+<!-- Define index naming convention (e.g. idx_{table}_{columns}) -->
+{{- end}}
+
+## Enum Strategy
+{{- if .HasProfile}}
+**{{.Profile.DB.EnumStrategy}}**
+{{- else}}
+<!-- Database-level enum types vs application-level constants stored as VARCHAR? -->
+{{- end}}
+
+## Migrations
+{{- if .HasProfile}}
+**Tool: {{.Profile.DB.Migrations}}**
+
+Rules:
+- Migrations are **always forward-only** — no rollback scripts
+- Each migration must be atomic (single transaction where possible)
+- Never modify an existing migration file — add a new one
+- Migration filenames: `{timestamp}_{description}.up.sql`
+{{- else}}
+<!-- Migration tool and workflow -->
+{{- end}}
+
+## Foreign Keys
+
+Always define foreign key constraints explicitly. Use `ON DELETE RESTRICT` by default — document any deviation.
+
+---
+
+*Read by Forge DBA and Architect agents before any schema design or migration work.*

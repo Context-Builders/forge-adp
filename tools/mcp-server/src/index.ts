@@ -22,6 +22,7 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { execFileSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -367,6 +368,59 @@ const TOOLS: Tool[] = [
       required: [],
     },
   },
+  {
+    name: "forge_seed_and_bootstrap",
+    description:
+      "Seed a local project directory (creates .forge/ plan document stubs) and immediately " +
+      "bootstrap it by triggering the PM and Architect agents to populate those documents from " +
+      "a product brief. This is the single-command alternative to running the seeder CLI " +
+      "manually and then calling forge_bootstrap_project. " +
+      "Requires FORGE_SEEDER_PATH env var pointing to the compiled seeder binary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        local_path: {
+          type: "string",
+          description:
+            "Absolute path to the local project directory to seed (e.g. /Users/me/projects/payments-api). The .forge/ directory will be created here.",
+        },
+        project_name: {
+          type: "string",
+          description: "Human-readable project name (e.g. 'Payments API').",
+        },
+        company_id: {
+          type: "string",
+          description: "Company or org identifier slug (e.g. 'acme').",
+        },
+        project_id: {
+          type: "string",
+          description: "Project slug used in config and metric naming (e.g. 'acme-payments').",
+        },
+        github_repo: {
+          type: "string",
+          description: "GitHub repository in org/repo format (e.g. acme/payments-api).",
+        },
+        product_brief: {
+          type: "string",
+          description:
+            "Detailed product description: what it does, who it's for, core features, constraints, success criteria. " +
+            "Can be the full contents of a product brief markdown file. Minimum ~50 words.",
+        },
+        profile: {
+          type: "string",
+          description:
+            "Org standards profile to apply. Options: web-fullstack (Next.js+Go+PostgreSQL), " +
+            "api-service (Go+PostgreSQL, no frontend), data-pipeline (Python+PostgreSQL+workers). " +
+            "Omit to use generic stubs without pre-filled standards.",
+        },
+        ticket_id: {
+          type: "string",
+          description: "Optional Jira/Linear ticket ID to link this bootstrap task to.",
+        },
+      },
+      required: ["local_path", "project_name", "company_id", "project_id", "github_repo", "product_brief"],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -417,6 +471,17 @@ const BootstrapPlatformInput = z.object({
   ticket_id: z.string().optional(),
 });
 
+const SeedAndBootstrapInput = z.object({
+  local_path: z.string(),
+  project_name: z.string(),
+  company_id: z.string(),
+  project_id: z.string(),
+  github_repo: z.string(),
+  product_brief: z.string(),
+  profile: z.string().optional(),
+  ticket_id: z.string().optional(),
+});
+
 const PlanDocumentInput = z.object({
   repo: z.string(),
   document: z.string(),
@@ -430,7 +495,7 @@ async function handleTool(
   switch (name) {
     case "forge_submit_task": {
       const input = SubmitTaskInput.parse(args);
-      const task = await forgeRequest(ORCHESTRATOR_URL, "/v1/tasks", {
+      const task = await forgeRequest(ORCHESTRATOR_URL, "/api/v1/tasks", {
         method: "POST",
         body: input,
       });
@@ -441,7 +506,7 @@ async function handleTool(
       const { task_id } = TaskIdInput.parse(args);
       const task = await forgeRequest(
         ORCHESTRATOR_URL,
-        `/v1/tasks/${task_id}`
+        `/api/v1/tasks/${task_id}`
       );
       return JSON.stringify(task, null, 2);
     }
@@ -454,7 +519,7 @@ async function handleTool(
       params.set("limit", String(input.limit));
       const tasks = await forgeRequest(
         ORCHESTRATOR_URL,
-        `/v1/tasks?${params.toString()}`
+        `/api/v1/tasks?${params.toString()}`
       );
       return JSON.stringify(tasks, null, 2);
     }
@@ -463,7 +528,7 @@ async function handleTool(
       const { task_id, comment } = ApproveInput.parse(args);
       const result = await forgeRequest(
         ORCHESTRATOR_URL,
-        `/v1/tasks/${task_id}/approve`,
+        `/api/v1/tasks/${task_id}/approve`,
         { method: "POST", body: comment ? { comment } : undefined }
       );
       return JSON.stringify(result, null, 2);
@@ -473,20 +538,20 @@ async function handleTool(
       const { task_id, reason } = RejectInput.parse(args);
       const result = await forgeRequest(
         ORCHESTRATOR_URL,
-        `/v1/tasks/${task_id}/reject`,
+        `/api/v1/tasks/${task_id}/reject`,
         { method: "POST", body: { reason } }
       );
       return JSON.stringify(result, null, 2);
     }
 
     case "forge_list_agents": {
-      const agents = await forgeRequest(REGISTRY_URL, "/v1/agents");
+      const agents = await forgeRequest(REGISTRY_URL, "/api/v1/agents");
       return JSON.stringify(agents, null, 2);
     }
 
     case "forge_list_skills": {
       const { role } = RoleFilterInput.parse(args);
-      const path = role ? `/v1/skills?role=${role}` : "/v1/skills";
+      const path = role ? `/api/v1/skills?role=${role}` : "/api/v1/skills";
       const skills = await forgeRequest(REGISTRY_URL, path);
       return JSON.stringify(skills, null, 2);
     }
@@ -495,19 +560,19 @@ async function handleTool(
       const { role, name } = SkillInput.parse(args);
       const skill = await forgeRequest(
         REGISTRY_URL,
-        `/v1/skills/${role}/${name}`
+        `/api/v1/skills/${role}/${name}`
       );
       return JSON.stringify(skill, null, 2);
     }
 
     case "forge_list_plans": {
-      const plans = await forgeRequest(REGISTRY_URL, "/v1/plans");
+      const plans = await forgeRequest(REGISTRY_URL, "/api/v1/plans");
       return JSON.stringify(plans, null, 2);
     }
 
     case "forge_bootstrap_project": {
       const input = BootstrapInput.parse(args);
-      const task = await forgeRequest(ORCHESTRATOR_URL, "/v1/tasks", {
+      const task = await forgeRequest(ORCHESTRATOR_URL, "/api/v1/tasks", {
         method: "POST",
         body: {
           agent_role: "pm",
@@ -532,7 +597,7 @@ async function handleTool(
       const path = `.forge/${input.document}`;
       const doc = await forgeRequest(
         ORCHESTRATOR_URL,
-        `/v1/files?repo=${encodeURIComponent(input.repo)}&path=${encodeURIComponent(path)}&ref=${encodeURIComponent(branch)}`
+        `/api/v1/files?repo=${encodeURIComponent(input.repo)}&path=${encodeURIComponent(path)}&ref=${encodeURIComponent(branch)}`
       );
       return JSON.stringify(doc, null, 2);
     }
@@ -542,7 +607,7 @@ async function handleTool(
       // The PM agent detects platform mode from config.yaml — we just submit
       // the task pointing at any repo in the platform. The agent reads the
       // platform section and orchestrates across all sibling repos.
-      const task = await forgeRequest(ORCHESTRATOR_URL, "/v1/tasks", {
+      const task = await forgeRequest(ORCHESTRATOR_URL, "/api/v1/tasks", {
         method: "POST",
         body: {
           agent_role: "pm",
@@ -564,10 +629,63 @@ async function handleTool(
       return JSON.stringify(task, null, 2);
     }
 
+    case "forge_seed_and_bootstrap": {
+      const input = SeedAndBootstrapInput.parse(args);
+
+      const seederPath = process.env.FORGE_SEEDER_PATH ?? "";
+      if (!seederPath) {
+        throw new Error(
+          "FORGE_SEEDER_PATH environment variable is not set. " +
+          "Point it to the compiled seeder binary (e.g. /path/to/forge-adp/seeder)."
+        );
+      }
+
+      // Step 1: Run seeder to create .forge/ stubs
+      const seederArgs = [
+        "-name", input.project_name,
+        "-company", input.company_id,
+        "-project", input.project_id,
+        "-github-repo", input.github_repo,
+        "-output", input.local_path,
+      ];
+      if (input.profile) {
+        seederArgs.push("-profile", input.profile);
+      }
+
+      let seederOutput: string;
+      try {
+        seederOutput = execFileSync(seederPath, seederArgs, { encoding: "utf8" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Seeder failed: ${msg}`);
+      }
+
+      // Step 2: Submit bootstrap task to the orchestrator
+      const task = await forgeRequest(ORCHESTRATOR_URL, "/api/v1/tasks", {
+        method: "POST",
+        body: {
+          agent_role: "pm",
+          skill_name: "project-bootstrap",
+          title: `Bootstrap plan documents for ${input.github_repo}`,
+          description:
+            "Populate seeded .forge/ plan documents with content derived from the product brief. Delegate technical documents to the Architect agent.",
+          jira_ticket_id: input.ticket_id,
+          repo: input.github_repo,
+          input: {
+            product_brief: input.product_brief,
+            repo: input.github_repo,
+            profile: input.profile,
+          },
+        },
+      });
+
+      return JSON.stringify({ seeder_output: seederOutput.trim(), bootstrap_task: task }, null, 2);
+    }
+
     case "forge_health": {
       const [orchestrator, registry] = await Promise.allSettled([
-        forgeRequest(ORCHESTRATOR_URL, "/v1/health"),
-        forgeRequest(REGISTRY_URL, "/v1/health"),
+        forgeRequest(ORCHESTRATOR_URL, "/health"),
+        forgeRequest(REGISTRY_URL, "/health"),
       ]);
       return JSON.stringify(
         {

@@ -15,7 +15,6 @@ from pydantic import BaseModel
 import redis
 import yaml
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +57,7 @@ class SkillContext:
     plan_documents: dict[str, str]
     memories: list[dict]
     llm_config: dict
+    dependency_outputs: dict[str, dict] = field(default_factory=dict)
 
 
 class LLMProvider:
@@ -223,16 +223,25 @@ class MemoryStore:
         skill_name: str,
         limit: int = 10
     ) -> list[dict]:
-        """Retrieve memories relevant to the current task."""
+        """Retrieve memories relevant to the current task.
+
+        Returns role-scoped memories for this agent merged with project-scoped
+        memories written by any agent, ranked by confidence then recency.
+        Duplicates (same id) are deduplicated — role-scoped copy wins.
+        """
         from sqlalchemy import text
         with self.engine.connect() as conn:
             result = conn.execute(
                 text("""
-                    SELECT id, category, content, confidence, source_tickets
+                    SELECT id, agent_role, category, content, confidence,
+                           source_tickets, scope
                     FROM agent_memory
                     WHERE company_id = :company_id
                       AND project_id = :project_id
-                      AND agent_role = :agent_role
+                      AND (
+                          (scope = 'role' AND agent_role = :agent_role)
+                          OR scope = 'project'
+                      )
                     ORDER BY confidence DESC, last_referenced DESC
                     LIMIT :limit
                 """),
@@ -240,10 +249,22 @@ class MemoryStore:
                     "company_id": company_id,
                     "project_id": project_id,
                     "agent_role": agent_role,
-                    "limit": limit
+                    "limit": limit,
                 }
             )
-            return [dict(row._mapping) for row in result]
+            # Deduplicate by id, keeping the first occurrence (highest confidence).
+            seen: set[str] = set()
+            memories: list[dict] = []
+            for row in result:
+                row_dict = dict(row._mapping)
+                if row_dict["id"] not in seen:
+                    seen.add(row_dict["id"])
+                    memories.append(row_dict)
+            return memories
+
+    # Confidence threshold above which a memory is automatically promoted to
+    # project scope so all agent roles can read it.
+    PROJECT_SCOPE_THRESHOLD = 0.8
 
     def store_memory(
         self,
@@ -253,12 +274,25 @@ class MemoryStore:
         category: str,
         content: str,
         source_tickets: list[str],
-        confidence: float = 0.5
+        confidence: float = 0.5,
+        scope: str = "role",
     ) -> str:
-        """Store a new memory from task execution."""
+        """Store a new memory from task execution.
+
+        scope='role'    — visible only to this agent role (default).
+        scope='project' — visible to all agent roles in the project.
+
+        If scope is not explicitly set to 'project' but confidence exceeds
+        PROJECT_SCOPE_THRESHOLD, the memory is automatically promoted to
+        project scope so high-signal learnings propagate across roles.
+        """
         import uuid
         from datetime import datetime
         from sqlalchemy import text
+
+        effective_scope = scope
+        if effective_scope != "project" and confidence >= self.PROJECT_SCOPE_THRESHOLD:
+            effective_scope = "project"
 
         memory_id = str(uuid.uuid4())
         quarter = f"{datetime.now().year}-Q{(datetime.now().month - 1) // 3 + 1}"
@@ -268,9 +302,9 @@ class MemoryStore:
                 text("""
                     INSERT INTO agent_memory
                     (id, agent_role, project_id, company_id, category, content,
-                     source_tickets, confidence, quarter)
+                     source_tickets, confidence, quarter, scope)
                     VALUES (:id, :agent_role, :project_id, :company_id, :category,
-                            :content, :source_tickets, :confidence, :quarter)
+                            :content, :source_tickets, :confidence, :quarter, :scope)
                 """),
                 {
                     "id": memory_id,
@@ -281,7 +315,8 @@ class MemoryStore:
                     "content": content,
                     "source_tickets": source_tickets,
                     "confidence": confidence,
-                    "quarter": quarter
+                    "quarter": quarter,
+                    "scope": effective_scope,
                 }
             )
             conn.commit()
@@ -307,6 +342,7 @@ class BaseAgent(ABC):
         self.event_bus_url = event_bus_url
         self.client = httpx.Client()
         self.skills: dict[str, "Skill"] = {}
+        self._redis_client: Optional[redis.Redis] = None
 
     @property
     @abstractmethod
@@ -333,11 +369,18 @@ class BaseAgent(ABC):
         config = self.plan_reader.get_config(plans)
         llm_config = self._get_llm_config(task.skill_name, config)
 
+        # Pop dependency_outputs before constructing SkillContext so it doesn't
+        # contaminate the payload that skills inspect for their own declared inputs.
+        dependency_outputs: dict[str, dict] = task.input_payload.pop("dependency_outputs", {})
+        if not isinstance(dependency_outputs, dict):
+            dependency_outputs = {}
+
         context = SkillContext(
             task=task,
             plan_documents=plans,
             memories=memories,
-            llm_config=llm_config
+            llm_config=llm_config,
+            dependency_outputs=dependency_outputs,
         )
 
         if task.skill_name not in self.skills:
@@ -355,6 +398,11 @@ class BaseAgent(ABC):
 
             task.output_payload = result
             task.status = TaskStatus.IN_REVIEW
+
+            # Persist key decisions from the result as shared project memory so
+            # downstream agents can build on them without re-deriving from scratch.
+            self._store_task_memories(context, result)
+
             self._publish_event("task.completed", {
                 "task_id": task.id,
                 "output": result
@@ -380,16 +428,74 @@ class BaseAgent(ABC):
             "temperature": 0.7
         }
 
+    def _store_task_memories(self, context: SkillContext, result: dict) -> None:
+        """Extract high-signal decisions from a completed task result and persist
+        them as agent memories.
+
+        Memories extracted here use confidence=0.9, which causes store_memory to
+        automatically promote them to project scope so all agent roles can read
+        them in future tasks.
+        """
+        ticket_ids = [context.task.jira_ticket_id] if context.task.jira_ticket_id else []
+        base_kwargs = dict(
+            company_id=self.identity.company_id,
+            project_id=self.identity.project_id,
+            agent_role=self.role,
+            source_tickets=ticket_ids,
+            confidence=0.9,
+        )
+
+        # Architecture decisions — produced by the architect agent.
+        for decision in result.get("architecture_decisions", []):
+            if isinstance(decision, dict) and decision.get("decision"):
+                content = (
+                    f"[{context.task.skill_name}] Architecture decision: "
+                    f"{decision['decision']}. "
+                    f"Rationale: {decision.get('rationale', '')}. "
+                    f"Alternatives considered: {', '.join(decision.get('alternatives_considered', []))}"
+                )
+                self.memory.store_memory(category="architecture_decision", content=content, **base_kwargs)
+
+        # Entities — produced by architecture-design, consumed by api-design, DBA, developers.
+        entities = result.get("entities", [])
+        if entities:
+            names = ", ".join(e.get("name", "") for e in entities if e.get("name"))
+            content = (
+                f"[{context.task.skill_name}] Entities defined for this project: {names}. "
+                f"Full definitions available in task output."
+            )
+            self.memory.store_memory(category="data_model", content=content, **base_kwargs)
+
+        # Non-functional requirements — cross-cutting, relevant to all roles.
+        for nfr in result.get("non_functional_requirements", []):
+            if isinstance(nfr, dict) and nfr.get("description"):
+                content = (
+                    f"[{context.task.skill_name}] NFR ({nfr.get('category', 'general')}): "
+                    f"{nfr['description']}. Target: {nfr.get('target', 'unspecified')}."
+                )
+                self.memory.store_memory(category="non_functional_requirement", content=content, **base_kwargs)
+
+    def _get_redis(self) -> redis.Redis:
+        if self._redis_client is None:
+            self._redis_client = redis.Redis.from_url(self.event_bus_url)
+        return self._redis_client
+
     def _publish_event(self, event_type: str, payload: dict):
-        """Publish an event to the message bus."""
+        """Publish an event to the Redis Streams message bus."""
+        import uuid
+        from datetime import datetime, timezone
         try:
-            self.client.post(
-                f"{self.event_bus_url}/publish",
-                json={
-                    "type": event_type,
-                    "agent_id": self.identity.full_id,
-                    "payload": payload
-                }
+            event = {
+                "id": str(uuid.uuid4()),
+                "type": event_type,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "agent_id": self.identity.full_id,
+                "task_id": payload.get("task_id", ""),
+                "payload": json.dumps(payload),
+            }
+            self._get_redis().xadd(
+                "forge:events",
+                {"type": event_type, "data": json.dumps(event)},
             )
         except Exception as e:
             logger.error(f"Failed to publish event: {e}")
@@ -430,5 +536,23 @@ class Skill(ABC):
         if context.memories:
             memory_text = "\n".join([m["content"] for m in context.memories[:5]])
             prompt_parts.append(f"\n## Learned Patterns\n{memory_text}")
+
+        if context.dependency_outputs:
+            upstream_parts = ["\n## Upstream Context"]
+            upstream_parts.append(
+                "The following outputs were produced by upstream tasks this task depends on. "
+                "Use them as authoritative inputs unless you have a specific reason to deviate."
+            )
+            for i, (skill_name, output) in enumerate(context.dependency_outputs.items()):
+                if i >= 3:
+                    break
+                try:
+                    output_text = json.dumps(output, indent=2)
+                except (TypeError, ValueError):
+                    output_text = str(output)
+                upstream_parts.append(
+                    f"\n### Output from `{skill_name}`\n```json\n{output_text[:2000]}\n```"
+                )
+            prompt_parts.append("\n".join(upstream_parts))
 
         return "\n".join(prompt_parts)

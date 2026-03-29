@@ -7,9 +7,13 @@ Retrieves structured plan documents that agents use as context before executing 
 - API contracts (`API_CONTRACTS.md`)
 - Data model definitions (`DATA_MODEL.md`)
 - Contributing guidelines (`CONTRIBUTING.md`)
+- Org standards docs (`DB_CONVENTIONS.md`, `QA_STANDARDS.md`, `OBSERVABILITY.md`)
 - Any custom plan documents in `.forge/plans/`
 
 Documents are returned as a dictionary keyed by filename for direct consumption by other skills.
+
+Standards documents (`DB_CONVENTIONS.md`, `QA_STANDARDS.md`, `OBSERVABILITY.md`) are always
+requested when present — agents treat them as non-negotiable constraints, not suggestions.
 
 ## Prerequisites
 
@@ -22,6 +26,7 @@ Documents are returned as a dictionary keyed by filename for direct consumption 
 1. **Build Document List**
    - Accept `documents` list from calling agent
    - Add any documents referenced in `.forge/config.yaml` under `plan_documents`
+   - Add any documents listed in `.forge/config.yaml` under `standards.documents` (e.g. `DB_CONVENTIONS.md`, `QA_STANDARDS.md`, `OBSERVABILITY.md`)
 
 2. **Attempt GitHub Read**
    - For each document, attempt to read from `.forge/plans/{document}` in the target repo
@@ -42,7 +47,10 @@ Documents are returned as a dictionary keyed by filename for direct consumption 
 
 | Document | Sections to Consult |
 |----------|---------------------|
-| `.forge/config.yaml` | `plan_documents` list and Confluence space key |
+| `.forge/config.yaml` | `plan_documents` list, `standards.documents` list, and Confluence space key |
+| `DB_CONVENTIONS.md` | Primary key strategy, naming, audit columns, soft deletes, migrations |
+| `QA_STANDARDS.md` | Testing pyramid, coverage threshold, linting tools |
+| `OBSERVABILITY.md` | Tooling, metric naming, structured logging fields, SLO requirements |
 
 ## Quality Gates
 

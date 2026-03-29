@@ -9,7 +9,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/dotrage/forge-adp/pkg/events"
@@ -49,13 +49,13 @@ func New(cfg SchedulerConfig) *Scheduler {
 
 // Run blocks until ctx is cancelled, firing scheduled governance tasks.
 func (s *Scheduler) Run(ctx context.Context) {
-	log.Println("[governance-scheduler] started")
+	slog.Info("governance scheduler started")
 	complianceTicker := s.nextTicker(ctx, s.nextWeeklyMonday)
 	driftTicker := s.nextTicker(ctx, s.nextMonthlyFirst)
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[governance-scheduler] stopped")
+			slog.Info("governance scheduler stopped")
 			return
 		case <-complianceTicker:
 			s.fire(ctx, "compliance-report")
@@ -80,10 +80,10 @@ func (s *Scheduler) fire(ctx context.Context, skillName string) {
 		Input:     input,
 	}
 	if err := s.cfg.TaskCreator(ctx, task); err != nil {
-		log.Printf("[governance-scheduler] failed to create %s task: %v", skillName, err)
+		slog.Error("governance scheduler failed to create task", slog.String("skill_name", skillName), slog.Any("error", err))
 		return
 	}
-	log.Printf("[governance-scheduler] queued governance/%s task %s", skillName, task.ID)
+	slog.Info("governance task queued", slog.String("skill_name", skillName), slog.String("task_id", task.ID))
 	payload, _ := json.Marshal(map[string]string{
 		"skill_name": skillName,
 		"task_id":    task.ID,

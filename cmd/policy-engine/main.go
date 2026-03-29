@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,9 +10,12 @@ import (
 
 	"github.com/dotrage/forge-adp/internal/policy"
 	"github.com/dotrage/forge-adp/pkg/config"
+	"github.com/dotrage/forge-adp/pkg/logger"
 )
 
 func main() {
+	logger.Init("policy-engine")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -21,7 +24,8 @@ func main() {
 		OPABundle:   os.Getenv("OPA_BUNDLE_PATH"),
 	})
 	if err != nil {
-		log.Fatalf("failed to create policy engine: %v", err)
+		slog.Error("failed to create policy engine", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -30,15 +34,16 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/authorize", engine.HandleAuthorize)
 	mux.HandleFunc("/api/v1/policies", engine.HandlePolicies)
+	mux.HandleFunc("/api/v1/policies/{id}", engine.HandlePolicy)
 
 	addr := config.PolicyEnginePort()
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: logger.HTTPMiddleware("policy-engine", mux),
 	}
 
 	go func() {
-		log.Printf("policy engine listening on %s", addr)
+		slog.Info("policy engine listening", slog.String("addr", addr))
 		server.ListenAndServe()
 	}()
 
@@ -46,6 +51,6 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	log.Println("shutting down policy engine...")
+	slog.Info("shutting down policy engine")
 	server.Shutdown(ctx)
 }

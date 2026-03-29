@@ -70,3 +70,12 @@ forge:
     medium_term:
       retention: "quarterly"
       max_records_per_agent: 500
+{{- if .HasProfile}}
+
+  standards:
+    profile: "{{.Profile.Name}}"
+    documents:
+      - "DB_CONVENTIONS.md"
+      - "QA_STANDARDS.md"
+      - "OBSERVABILITY.md"
+{{- end}}

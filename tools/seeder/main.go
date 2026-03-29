@@ -24,6 +24,7 @@ type ProjectConfig struct {
 	TechStack      TechStack
 	Agents         []string
 	Platform       *PlatformConfig
+	Profile        *Profile
 }
 
 type TechStack struct {
@@ -47,6 +48,140 @@ type PlatformRepo struct {
 	LocalPath string
 }
 
+// Profile holds org-level standards for a named project type.
+// When a profile is selected via --profile, the seeder stamps these
+// standards into DB_CONVENTIONS.md, QA_STANDARDS.md, and OBSERVABILITY.md
+// so agents follow consistent conventions across all projects.
+type Profile struct {
+	Name          string
+	Description   string
+	QA            QAStack
+	Observability ObservabilityStack
+	DB            DBConventions
+}
+
+// QAStack defines the testing and linting toolchain for a profile.
+type QAStack struct {
+	UnitFrontend      string
+	UnitBackend       string
+	Integration       string
+	E2E               string
+	CoverageThreshold int
+	LintFrontend      string
+	LintBackend       string
+}
+
+// ObservabilityStack defines the monitoring and alerting toolchain.
+type ObservabilityStack struct {
+	APM          string
+	Logs         string
+	Metrics      string
+	Synthetics   string
+	MetricNaming string
+	SLOEnabled   bool
+}
+
+// DBConventions defines org-level rules for database schema design.
+type DBConventions struct {
+	PrimaryKey   string
+	SoftDeletes  bool
+	AuditColumns []string
+	Naming       string
+	Migrations   string
+	IndexNaming  string
+	EnumStrategy string
+}
+
+// builtinProfiles are the named profiles available via --profile.
+// Each profile pre-fills QA, observability, and DB standards so agents
+// produce consistent architecture across projects of the same type.
+var builtinProfiles = map[string]Profile{
+	"web-fullstack": {
+		Name:        "web-fullstack",
+		Description: "Full-stack web application (Next.js + Go + PostgreSQL)",
+		QA: QAStack{
+			UnitFrontend:      "Jest + React Testing Library",
+			UnitBackend:       "Go test + testify",
+			Integration:       "Testcontainers",
+			E2E:               "Playwright",
+			CoverageThreshold: 80,
+			LintFrontend:      "ESLint + Prettier",
+			LintBackend:       "golangci-lint",
+		},
+		Observability: ObservabilityStack{
+			APM:          "Datadog APM",
+			Logs:         "Datadog Logs (structured JSON via zerolog)",
+			Metrics:      "Datadog Metrics (StatsD)",
+			Synthetics:   "Datadog Synthetics",
+			MetricNaming: "service.operation.result",
+			SLOEnabled:   true,
+		},
+		DB: DBConventions{
+			PrimaryKey:   "UUID v7 (github.com/google/uuid)",
+			SoftDeletes:  true,
+			AuditColumns: []string{"id", "created_at", "updated_at", "deleted_at"},
+			Naming:       "snake_case — tables plural, columns snake_case",
+			Migrations:   "golang-migrate (migrate/v4, SQL files)",
+			IndexNaming:  "idx_{table}_{columns}",
+			EnumStrategy: "PostgreSQL native enum types",
+		},
+	},
+	"api-service": {
+		Name:        "api-service",
+		Description: "Backend API service (Go + PostgreSQL), no frontend",
+		QA: QAStack{
+			UnitBackend:       "Go test + testify",
+			Integration:       "Testcontainers",
+			E2E:               "k6 (load and smoke tests)",
+			CoverageThreshold: 80,
+			LintBackend:       "golangci-lint",
+		},
+		Observability: ObservabilityStack{
+			APM:          "Datadog APM",
+			Logs:         "Datadog Logs (structured JSON via zerolog)",
+			Metrics:      "Datadog Metrics (StatsD)",
+			MetricNaming: "service.operation.result",
+			SLOEnabled:   true,
+		},
+		DB: DBConventions{
+			PrimaryKey:   "UUID v7 (github.com/google/uuid)",
+			SoftDeletes:  true,
+			AuditColumns: []string{"id", "created_at", "updated_at", "deleted_at"},
+			Naming:       "snake_case — tables plural, columns snake_case",
+			Migrations:   "golang-migrate (migrate/v4, SQL files)",
+			IndexNaming:  "idx_{table}_{columns}",
+			EnumStrategy: "PostgreSQL native enum types",
+		},
+	},
+	"data-pipeline": {
+		Name:        "data-pipeline",
+		Description: "Data processing pipeline (Python + PostgreSQL + async workers)",
+		QA: QAStack{
+			UnitBackend:       "pytest + pytest-asyncio",
+			Integration:       "Testcontainers (pytest-testcontainers)",
+			E2E:               "pytest (end-to-end pipeline tests with real data fixtures)",
+			CoverageThreshold: 75,
+			LintBackend:       "ruff + mypy",
+		},
+		Observability: ObservabilityStack{
+			APM:          "Datadog APM (ddtrace)",
+			Logs:         "Datadog Logs (structlog, JSON format)",
+			Metrics:      "Datadog Metrics (DogStatsD)",
+			MetricNaming: "pipeline.stage.result",
+			SLOEnabled:   false,
+		},
+		DB: DBConventions{
+			PrimaryKey:   "UUID v7 (python-uuid-utils)",
+			SoftDeletes:  false,
+			AuditColumns: []string{"id", "created_at", "updated_at"},
+			Naming:       "snake_case — tables plural, columns snake_case",
+			Migrations:   "Alembic (auto-generated migrations)",
+			IndexNaming:  "idx_{table}_{columns}",
+			EnumStrategy: "Python Enum classes (stored as VARCHAR)",
+		},
+	},
+}
+
 // identifier returns a human-readable label for the repo (path or org/repo).
 func (pr PlatformRepo) identifier() string {
 	if pr.LocalPath != "" {
@@ -60,18 +195,9 @@ func (c ProjectConfig) HasPlatform() bool {
 	return c.Platform != nil && len(c.Platform.Repos) > 0
 }
 
-// SiblingRepos returns platform repos excluding the current GitHubRepo.
-func (c ProjectConfig) SiblingRepos() []PlatformRepo {
-	if c.Platform == nil {
-		return nil
-	}
-	var siblings []PlatformRepo
-	for _, r := range c.Platform.Repos {
-		if r.Repo != c.GitHubRepo {
-			siblings = append(siblings, r)
-		}
-	}
-	return siblings
+// HasProfile returns true if a standards profile was selected.
+func (c ProjectConfig) HasProfile() bool {
+	return c.Profile != nil
 }
 
 func main() {
@@ -95,6 +221,11 @@ func main() {
 	var agents string
 	flag.StringVar(&agents, "agents", "pm,architect,backend-developer,frontend-developer,qa,secops", "Comma-separated agent roles")
 
+	// Profile: selects a named set of org standards (QA tools, DB conventions, observability stack).
+	// Available profiles: web-fullstack, api-service, data-pipeline
+	var profileName string
+	flag.StringVar(&profileName, "profile", "", "Org standards profile (web-fullstack, api-service, data-pipeline)")
+
 	// Platform mode: seed multiple repos/directories as a single platform.
 	// Use -platform-repos for GitHub/GitLab repos (org/repo format).
 	// Use -platform-sources for local directories on disk.
@@ -113,6 +244,20 @@ func main() {
 	}
 
 	config.Agents = strings.Split(agents, ",")
+
+	// Resolve profile
+	if profileName != "" {
+		p, ok := builtinProfiles[profileName]
+		if !ok {
+			var names []string
+			for k := range builtinProfiles {
+				names = append(names, k)
+			}
+			fmt.Printf("Error: unknown profile %q. Available profiles: %s\n", profileName, strings.Join(names, ", "))
+			os.Exit(1)
+		}
+		config.Profile = &p
+	}
 
 	// Parse platform configuration if provided
 	hasPlatform := *platformID != "" && (*platformRepos != "" || *platformSources != "")
@@ -185,6 +330,10 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Seeded Forge project in %s/.forge/\n", *targetDir)
+	}
+
+	if config.Profile != nil {
+		fmt.Printf("📋 Applied profile: %s (%s)\n", config.Profile.Name, config.Profile.Description)
 	}
 }
 
